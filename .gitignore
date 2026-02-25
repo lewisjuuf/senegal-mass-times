@@ -21,3 +21,10 @@ frontend/dist/
 # IDE
 .vscode/
 .idea/
+
+# Claude Code
+.claude/settings.local.json
+
+# Python version (Render uses PYTHON_VERSION env var)
+backend/.python-version
+backend/runtime.txt

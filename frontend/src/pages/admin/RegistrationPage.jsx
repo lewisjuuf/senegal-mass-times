@@ -48,10 +48,12 @@ const RegistrationPage = () => {
       await authService.register(registrationData);
       setSuccess(true);
     } catch (err) {
-      setError(
-        err.response?.data?.detail ||
-          "Erreur lors de l'inscription. Veuillez réessayer."
-      );
+      const detail = err.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        setError(detail.map((e) => e.msg || e.message || JSON.stringify(e)).join('. '));
+      } else {
+        setError(detail || "Erreur lors de l'inscription. Veuillez réessayer.");
+      }
     } finally {
       setLoading(false);
     }
@@ -70,8 +72,8 @@ const RegistrationPage = () => {
             </h2>
             <p className="text-gray-600 mb-6">
               Votre demande d'inscription a été envoyée avec succès. L'administrateur
-              principal examinera votre demande et vous pourrez vous connecter une
-              fois approuvé.
+              principal examinera votre demande. Vous recevrez un email de confirmation
+              une fois votre inscription approuvée.
             </p>
             <button
               onClick={() => navigate('/admin/login')}

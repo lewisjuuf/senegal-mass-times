@@ -76,7 +76,11 @@ const authService = {
   },
 
   register: async (registrationData) => {
-    const response = await api.post('/auth/register', registrationData);
+    // Convert empty strings to null so optional EmailStr fields pass validation
+    const cleaned = Object.fromEntries(
+      Object.entries(registrationData).map(([k, v]) => [k, v === '' ? null : v])
+    );
+    const response = await api.post('/auth/register', cleaned);
     return response.data;
   },
 };
