@@ -21,6 +21,7 @@ from backend_api import (
     PendingParishResponse, PasswordChangeRequest
 )
 from auth import get_current_parish_id, get_current_user, get_password_hash, verify_password
+from email_service import notify_parish_approved, notify_parish_rejected
 
 router = APIRouter()
 
@@ -759,6 +760,12 @@ def approve_parish(
 
     parish.is_approved = True
     db.commit()
+
+    notify_parish_approved(
+        admin_email=parish.admin_email,
+        parish_name=parish.name,
+    )
+
     return {"message": f"Paroisse '{parish.name}' approuvée avec succès"}
 
 
@@ -786,9 +793,18 @@ def reject_parish(
             detail="Paroisse non trouvée ou déjà approuvée"
         )
 
+    parish_admin_email = parish.admin_email
+    parish_name = parish.name
+
     db.delete(parish)
     db.commit()
-    return {"message": f"Inscription de '{parish.name}' rejetée"}
+
+    notify_parish_rejected(
+        admin_email=parish_admin_email,
+        parish_name=parish_name,
+    )
+
+    return {"message": f"Inscription de '{parish_name}' rejetée"}
 
 
 # ============ Password Change (All Admins) ============

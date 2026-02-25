@@ -15,6 +15,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend_api import get_db, Parish, RegistrationRequest, RegistrationResponse
 from auth import create_access_token, verify_password, get_password_hash, ACCESS_TOKEN_EXPIRE_MINUTES
+from email_service import notify_new_registration
 
 router = APIRouter()
 
@@ -147,6 +148,12 @@ def register(registration: RegistrationRequest, db: Session = Depends(get_db)):
     db.add(new_parish)
     db.commit()
     db.refresh(new_parish)
+
+    notify_new_registration(
+        parish_name=new_parish.name,
+        parish_city=new_parish.city,
+        admin_email=new_parish.admin_email,
+    )
 
     return RegistrationResponse(
         message="Inscription envoyée. En attente d'approbation par l'administrateur.",
