@@ -1,12 +1,20 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, MapPin, Clock, Heart } from 'lucide-react';
+import api from '../../services/api';
 
 /**
  * Public Home Page - Enhanced UI
  * Landing page for finding mass times in Senegal
  */
 const HomePage = () => {
+  const [parishCount, setParishCount] = useState(null);
+
+  useEffect(() => {
+    api.get('/parishes')
+      .then((res) => setParishCount(res.data.length))
+      .catch(() => {});
+  }, []);
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-primary-50">
       {/* Navbar */}
@@ -42,7 +50,7 @@ const HomePage = () => {
             <span className="text-primary-600">au Sénégal</span>
           </h2>
           <p className="text-xl md:text-2xl text-gray-600 mb-10 max-w-3xl mx-auto">
-            Consultez facilement les horaires des messes catholiques dans toutes les paroisses
+            Consultez facilement les horaires des messes catholiques dans toutes les paroisses enregistrées sur la plateforme.
           </p>
 
           {/* CTA Search Button */}
@@ -65,7 +73,7 @@ const HomePage = () => {
               Toutes les paroisses
             </h3>
             <p className="text-gray-600 text-center leading-relaxed">
-              Explorez toutes les paroisses catholiques à travers le Sénégal avec leurs informations complètes
+              Explorez les paroisses catholiques à travers le Sénégal avec leurs informations complètes
             </p>
           </div>
 
@@ -109,9 +117,9 @@ const HomePage = () => {
               <p className="text-gray-700 text-lg leading-relaxed">
                 Cette plateforme référence actuellement{' '}
                 <span className="font-bold text-primary-600 text-xl">
-                  15 paroisses à Dakar
+                  {parishCount !== null ? `${parishCount} paroisse${parishCount > 1 ? 's' : ''}` : 'des paroisses'}
                 </span>{' '}
-                avec leurs horaires de messes. D'autres diocèses seront ajoutés prochainement pour couvrir tout le Sénégal.
+                au Sénégal avec leurs horaires de messes. De nouvelles paroisses sont ajoutées régulièrement.
               </p>
             </div>
           </div>
