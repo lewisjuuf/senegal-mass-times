@@ -1,20 +1,68 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Search, MapPin, Clock, Heart } from 'lucide-react';
 import api from '../../services/api';
+import parishService from '../../services/parishService';
 
 /**
  * Public Home Page - Enhanced UI
  * Landing page for finding mass times in Senegal
  */
 const HomePage = () => {
+  const navigate = useNavigate();
   const [parishCount, setParishCount] = useState(null);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef(null);
 
   useEffect(() => {
     api.get('/parishes')
       .then((res) => setParishCount(res.data.length))
       .catch(() => {});
   }, []);
+
+  // Debounced search
+  useEffect(() => {
+    if (query.trim().length < 2) {
+      setResults([]);
+      setShowDropdown(false);
+      return;
+    }
+    const timeout = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const data = await parishService.getParishes({ city: query });
+        setResults(data.slice(0, 5));
+        setShowDropdown(true);
+      } catch {
+        setResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [query]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    if (query.trim()) {
+      navigate(`/search?q=${encodeURIComponent(query.trim())}`);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-primary-50">
       {/* Navbar */}
@@ -53,14 +101,58 @@ const HomePage = () => {
             Consultez facilement les horaires des messes catholiques dans toutes les paroisses enregistrées sur la plateforme.
           </p>
 
-          {/* CTA Search Button */}
-          <Link
-            to="/search"
-            className="inline-flex items-center gap-3 px-10 py-5 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-2xl hover:from-primary-700 hover:to-primary-800 transition-all text-lg font-semibold shadow-2xl transform hover:scale-105 hover:shadow-primary-500/50"
-          >
-            <Search className="w-6 h-6" />
-            Rechercher une paroisse
-          </Link>
+          {/* Inline Search Bar */}
+          <div className="max-w-2xl mx-auto relative" ref={dropdownRef}>
+            <form onSubmit={handleSearchSubmit}>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
+                  <Search className="h-6 w-6 text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Rechercher par nom ou ville (ex: Dakar, Cathédrale...)"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onFocus={() => results.length > 0 && setShowDropdown(true)}
+                  className="w-full pl-14 pr-4 py-5 text-lg border-2 border-gray-200 rounded-2xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all shadow-xl"
+                />
+                {searchLoading && (
+                  <div className="absolute inset-y-0 right-0 pr-5 flex items-center">
+                    <div className="w-5 h-5 border-2 border-primary-600 border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                )}
+              </div>
+            </form>
+
+            {/* Dropdown Results */}
+            {showDropdown && results.length > 0 && (
+              <div className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden">
+                {results.map((parish) => (
+                  <Link
+                    key={parish.id}
+                    to={`/parish/${parish.id}`}
+                    className="flex items-center gap-4 px-5 py-4 hover:bg-primary-50 transition-colors border-b border-gray-100 last:border-b-0"
+                    onClick={() => setShowDropdown(false)}
+                  >
+                    <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <MapPin className="w-5 h-5 text-primary-600" />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="font-semibold text-gray-900">{parish.name}</p>
+                      <p className="text-sm text-gray-500">{parish.city}{parish.mass_times?.length ? ` · ${parish.mass_times.length} messe${parish.mass_times.length > 1 ? 's' : ''}` : ''}</p>
+                    </div>
+                  </Link>
+                ))}
+                <Link
+                  to={`/search?q=${encodeURIComponent(query)}`}
+                  className="block px-5 py-3 text-center text-primary-600 font-medium hover:bg-primary-50 transition-colors text-sm"
+                  onClick={() => setShowDropdown(false)}
+                >
+                  Voir tous les résultats →
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Features - Enhanced */}

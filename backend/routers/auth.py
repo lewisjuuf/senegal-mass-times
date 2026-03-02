@@ -14,8 +14,8 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend_api import get_db, Parish, RegistrationRequest, RegistrationResponse
-from auth import create_access_token, verify_password, get_password_hash, ACCESS_TOKEN_EXPIRE_MINUTES
-from email_service import notify_new_registration
+from auth import create_access_token, verify_password, verify_token, get_password_hash, ACCESS_TOKEN_EXPIRE_MINUTES
+from email_service import notify_new_registration, notify_password_reset, FRONTEND_URL
 
 router = APIRouter()
 
@@ -35,6 +35,17 @@ class TokenResponse(BaseModel):
     parish_id: int
     parish_name: str
     is_master_admin: bool = False
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Forgot password request"""
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    """Reset password with token"""
+    token: str
+    new_password: str
 
 
 # ============ Endpoints ============
@@ -160,3 +171,58 @@ def register(registration: RegistrationRequest, db: Session = Depends(get_db)):
         parish_id=new_parish.id,
         parish_name=new_parish.name,
     )
+
+
+@router.post("/forgot-password")
+def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Send a password reset email.
+    Always returns success to avoid leaking which emails exist.
+    """
+    parish = db.query(Parish).filter(
+        Parish.admin_email == request.email
+    ).first()
+
+    if parish:
+        # Generate a short-lived reset token (1 hour)
+        reset_token = create_access_token(
+            data={"parish_id": parish.id, "purpose": "password_reset"},
+            expires_delta=timedelta(hours=1),
+        )
+        reset_link = f"{FRONTEND_URL}/admin/reset-password?token={reset_token}"
+        notify_password_reset(parish.admin_email, reset_link)
+
+    return {"message": "Si cet email existe, un lien de réinitialisation a été envoyé."}
+
+
+@router.post("/reset-password")
+def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Reset password using a valid reset token.
+    """
+    try:
+        payload = verify_token(request.token)
+    except HTTPException:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Lien invalide ou expiré. Veuillez refaire une demande.",
+        )
+
+    if payload.get("purpose") != "password_reset":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Lien invalide ou expiré. Veuillez refaire une demande.",
+        )
+
+    parish_id = payload.get("parish_id")
+    parish = db.query(Parish).filter(Parish.id == parish_id).first()
+    if not parish:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Compte non trouvé.",
+        )
+
+    parish.admin_password_hash = get_password_hash(request.new_password)
+    db.commit()
+
+    return {"message": "Mot de passe réinitialisé avec succès. Vous pouvez maintenant vous connecter."}

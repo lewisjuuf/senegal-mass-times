@@ -71,6 +71,19 @@ def notify_parish_approved(admin_email: str, parish_name: str):
     _send_email(admin_email, subject, html)
 
 
+def notify_password_reset(admin_email: str, reset_link: str):
+    subject = "Réinitialisation de votre mot de passe"
+    html = f"""
+    <h2>Réinitialisation de mot de passe</h2>
+    <p>Vous avez demandé la réinitialisation de votre mot de passe sur la plateforme Horaires des Messes au Sénégal.</p>
+    <p>Cliquez sur le lien ci-dessous pour définir un nouveau mot de passe :</p>
+    <p><a href="{reset_link}" style="display:inline-block;padding:12px 24px;background:#4F46E5;color:white;text-decoration:none;border-radius:8px;font-weight:bold;">Réinitialiser mon mot de passe</a></p>
+    <p>Ce lien expire dans 1 heure.</p>
+    <p>Si vous n'avez pas demandé cette réinitialisation, vous pouvez ignorer cet email.</p>
+    """
+    _send_email(admin_email, subject, html)
+
+
 def notify_parish_rejected(admin_email: str, parish_name: str):
     subject = f"Inscription non approuvée : {parish_name}"
     html = f"""

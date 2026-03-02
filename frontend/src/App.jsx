@@ -14,6 +14,8 @@ const ParishInfoPage = React.lazy(() => import('./pages/admin/ParishInfoPage'));
 const MasterDashboardPage = React.lazy(() => import('./pages/admin/MasterDashboardPage'));
 const RegistrationPage = React.lazy(() => import('./pages/admin/RegistrationPage'));
 const ChangePasswordPage = React.lazy(() => import('./pages/admin/ChangePasswordPage'));
+const ForgotPasswordPage = React.lazy(() => import('./pages/admin/ForgotPasswordPage'));
+const ResetPasswordPage = React.lazy(() => import('./pages/admin/ResetPasswordPage'));
 
 // Loading fallback component
 const LoadingFallback = () => (
@@ -37,6 +39,8 @@ function App() {
         {/* Admin Routes */}
         <Route path="/admin/login" element={<LoginPage />} />
         <Route path="/admin/register" element={<RegistrationPage />} />
+        <Route path="/admin/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/admin/reset-password" element={<ResetPasswordPage />} />
         <Route
           path="/admin/dashboard"
           element={

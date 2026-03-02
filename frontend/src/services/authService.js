@@ -75,6 +75,16 @@ const authService = {
     return !!sessionStorage.getItem('auth_token');
   },
 
+  forgotPassword: async (email) => {
+    const response = await api.post('/auth/forgot-password', { email });
+    return response.data;
+  },
+
+  resetPassword: async (token, newPassword) => {
+    const response = await api.post('/auth/reset-password', { token, new_password: newPassword });
+    return response.data;
+  },
+
   register: async (registrationData) => {
     // Convert empty strings to null so optional EmailStr fields pass validation
     const cleaned = Object.fromEntries(

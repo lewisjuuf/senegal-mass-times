@@ -121,6 +121,17 @@ const LoginPage = () => {
               />
             </div>
 
+            {/* Forgot Password Link */}
+            <div className="text-right">
+              <button
+                type="button"
+                onClick={() => navigate('/admin/forgot-password')}
+                className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+              >
+                Mot de passe oublié ?
+              </button>
+            </div>
+
             {/* Submit Button */}
             <button
               type="submit"
