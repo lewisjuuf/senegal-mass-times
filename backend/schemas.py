@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
-from datetime import datetime, time
+from datetime import datetime, date, time
 from enum import Enum
 
 
@@ -40,12 +40,16 @@ class NewsCreate(BaseModel):
     title: str
     content: str
     category: str = "General"
+    event_start_date: Optional[date] = None
+    event_end_date: Optional[date] = None
 
 
 class NewsUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
     category: Optional[str] = None
+    event_start_date: Optional[date] = None
+    event_end_date: Optional[date] = None
 
 
 class NewsResponse(BaseModel):
@@ -54,6 +58,8 @@ class NewsResponse(BaseModel):
     content: str
     category: str
     is_active: bool
+    event_start_date: Optional[date] = None
+    event_end_date: Optional[date] = None
     publish_date: datetime
     class Config:
         from_attributes = True

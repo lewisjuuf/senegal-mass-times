@@ -329,7 +329,9 @@ def add_news(
         parish_id=parish_id,
         title=news.title,
         content=news.content,
-        category=news.category
+        category=news.category,
+        event_start_date=news.event_start_date,
+        event_end_date=news.event_end_date,
     )
 
     db.add(db_news)
@@ -385,6 +387,10 @@ def update_news(
         db_news.content = news.content
     if news.category is not None:
         db_news.category = news.category
+    if news.event_start_date is not None:
+        db_news.event_start_date = news.event_start_date
+    if news.event_end_date is not None:
+        db_news.event_end_date = news.event_end_date
 
     db.commit()
     db.refresh(db_news)

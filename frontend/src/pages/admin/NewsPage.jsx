@@ -33,6 +33,8 @@ const NewsPage = () => {
     title: '',
     content: '',
     category: 'General',
+    event_start_date: '',
+    event_end_date: '',
   });
 
   useEffect(() => {
@@ -60,6 +62,8 @@ const NewsPage = () => {
       title: '',
       content: '',
       category: 'General',
+      event_start_date: '',
+      event_end_date: '',
     });
     setAddModalOpen(true);
   };
@@ -70,6 +74,8 @@ const NewsPage = () => {
       title: newsItem.title,
       content: newsItem.content,
       category: newsItem.category || 'General',
+      event_start_date: newsItem.event_start_date || '',
+      event_end_date: newsItem.event_end_date || '',
     });
     setEditModalOpen(true);
   };
@@ -100,7 +106,12 @@ const NewsPage = () => {
     try {
       setSubmitting(true);
       setError(null);
-      await parishService.addNews(targetParishId, formData);
+      const payload = {
+        ...formData,
+        event_start_date: formData.event_start_date || null,
+        event_end_date: formData.event_end_date || null,
+      };
+      await parishService.addNews(targetParishId, payload);
       setSuccess('Actualité ajoutée avec succès');
       handleCloseModals();
       fetchNews();
@@ -118,7 +129,12 @@ const NewsPage = () => {
     try {
       setSubmitting(true);
       setError(null);
-      await parishService.updateNews(targetParishId, selectedNews.id, formData);
+      const payload = {
+        ...formData,
+        event_start_date: formData.event_start_date || null,
+        event_end_date: formData.event_end_date || null,
+      };
+      await parishService.updateNews(targetParishId, selectedNews.id, payload);
       setSuccess('Actualité modifiée avec succès');
       handleCloseModals();
       fetchNews();
@@ -234,6 +250,13 @@ const NewsPage = () => {
                     <p className="text-gray-700 mb-4 whitespace-pre-wrap">
                       {item.content}
                     </p>
+                    {item.event_start_date && (
+                      <p className="text-sm text-primary-700 font-medium mb-2">
+                        {item.event_end_date
+                          ? `📅 Du ${new Date(item.event_start_date + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })} au ${new Date(item.event_end_date + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`
+                          : `📅 ${new Date(item.event_start_date + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`}
+                      </p>
+                    )}
                     <p className="text-sm text-gray-500">
                       Publié le {new Date(item.publish_date).toLocaleDateString('fr-FR', {
                         day: 'numeric',
@@ -317,6 +340,37 @@ const NewsPage = () => {
               </select>
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Date de l'événement (optionnel)
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Début</label>
+                  <input
+                    type="date"
+                    name="event_start_date"
+                    value={formData.event_start_date}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
+                {formData.event_start_date && (
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Fin (optionnel)</label>
+                    <input
+                      type="date"
+                      name="event_end_date"
+                      value={formData.event_end_date}
+                      onChange={handleChange}
+                      min={formData.event_start_date}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="flex gap-3 pt-4">
               <button
                 type="button"
@@ -386,6 +440,37 @@ const NewsPage = () => {
                 <option value="Event">Événement</option>
                 <option value="Announcement">Annonce</option>
               </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Date de l'événement (optionnel)
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Début</label>
+                  <input
+                    type="date"
+                    name="event_start_date"
+                    value={formData.event_start_date}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
+                {formData.event_start_date && (
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Fin (optionnel)</label>
+                    <input
+                      type="date"
+                      name="event_end_date"
+                      value={formData.event_end_date}
+                      onChange={handleChange}
+                      min={formData.event_start_date}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    />
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex gap-3 pt-4">

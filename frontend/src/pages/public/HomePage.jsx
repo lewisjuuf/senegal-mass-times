@@ -73,7 +73,7 @@ const HomePage = () => {
               Toutes les paroisses
             </h3>
             <p className="text-gray-600 text-center leading-relaxed">
-              Explorez les paroisses catholiques à travers le Sénégal avec leurs informations complètes
+              Explorez les paroisses catholiques à travers le Sénégal
             </p>
           </div>
 
@@ -140,12 +140,8 @@ const HomePage = () => {
       <footer className="bg-white border-t border-gray-200 mt-20">
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="text-gray-600">© 2024 Messes au Sénégal - Pour la communauté catholique</p>
-            <div className="flex items-center gap-2 text-gray-500">
-              <span>Fait avec</span>
-              <Heart className="w-4 h-4 text-red-500 fill-current" />
-              <span>au Sénégal</span>
-            </div>
+            <p className="text-gray-600"> {new Date().getFullYear()} Messes au Sénégal - Pour la communauté catholique</p>
+
           </div>
         </div>
       </footer>

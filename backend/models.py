@@ -1,7 +1,7 @@
 """SQLAlchemy database models"""
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, Time, Boolean, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Float, Time, Boolean, ForeignKey, DateTime, Date
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -61,6 +61,8 @@ class ParochialNews(Base):
     content = Column(String, nullable=False)
     category = Column(String, default="General")
     is_active = Column(Boolean, default=True)
+    event_start_date = Column(Date, nullable=True)
+    event_end_date = Column(Date, nullable=True)
     publish_date = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

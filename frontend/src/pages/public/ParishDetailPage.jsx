@@ -256,6 +256,13 @@ const ParishDetailPage = () => {
                   <p className="text-gray-700 mb-3 whitespace-pre-wrap leading-relaxed">
                     {item.content}
                   </p>
+                  {item.event_start_date && (
+                    <p className="text-sm text-primary-700 font-medium mb-2">
+                      {item.event_end_date
+                        ? `📅 Du ${new Date(item.event_start_date + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })} au ${new Date(item.event_end_date + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`
+                        : `📅 ${new Date(item.event_start_date + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`}
+                    </p>
+                  )}
                   <time className="text-sm text-gray-500">
                     Publié le {new Date(item.publish_date).toLocaleDateString('fr-FR', {
                       day: 'numeric',
