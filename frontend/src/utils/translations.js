@@ -75,3 +75,10 @@ export const getLanguageName = (language) => {
 export const getDayName = (day) => {
   return DAYS_FR[day] || day;
 };
+
+// Format time string to HH:MM (strip seconds if present)
+export const formatTime = (timeStr) => {
+  if (!timeStr) return '';
+  // "HH:MM:SS" → "HH:MM", already "HH:MM" stays unchanged
+  return timeStr.substring(0, 5);
+};

@@ -155,10 +155,10 @@ const HomePage = () => {
           </div>
         </div>
 
-        {/* Features - Enhanced */}
+        {/* Features */}
         <div className="grid md:grid-cols-3 gap-8 mt-20">
-          <div className="group bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100 hover:border-primary-200 transform hover:-translate-y-2">
-            <div className="w-14 h-14 bg-gradient-to-br from-primary-100 to-primary-200 rounded-xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+          <div className="bg-white rounded-2xl p-8 shadow-lg border border-gray-100">
+            <div className="w-14 h-14 bg-gradient-to-br from-primary-100 to-primary-200 rounded-xl flex items-center justify-center mx-auto mb-6">
               <MapPin className="w-7 h-7 text-primary-600" />
             </div>
             <h3 className="text-xl font-bold text-gray-900 mb-3 text-center">
@@ -169,8 +169,8 @@ const HomePage = () => {
             </p>
           </div>
 
-          <div className="group bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100 hover:border-primary-200 transform hover:-translate-y-2">
-            <div className="w-14 h-14 bg-gradient-to-br from-primary-100 to-primary-200 rounded-xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+          <div className="bg-white rounded-2xl p-8 shadow-lg border border-gray-100">
+            <div className="w-14 h-14 bg-gradient-to-br from-primary-100 to-primary-200 rounded-xl flex items-center justify-center mx-auto mb-6">
               <Clock className="w-7 h-7 text-primary-600" />
             </div>
             <h3 className="text-xl font-bold text-gray-900 mb-3 text-center">
@@ -181,8 +181,8 @@ const HomePage = () => {
             </p>
           </div>
 
-          <div className="group bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100 hover:border-primary-200 transform hover:-translate-y-2">
-            <div className="w-14 h-14 bg-gradient-to-br from-primary-100 to-primary-200 rounded-xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+          <div className="bg-white rounded-2xl p-8 shadow-lg border border-gray-100">
+            <div className="w-14 h-14 bg-gradient-to-br from-primary-100 to-primary-200 rounded-xl flex items-center justify-center mx-auto mb-6">
               <Search className="w-7 h-7 text-primary-600" />
             </div>
             <h3 className="text-xl font-bold text-gray-900 mb-3 text-center">

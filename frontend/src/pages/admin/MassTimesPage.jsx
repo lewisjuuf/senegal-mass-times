@@ -6,7 +6,7 @@ import AdminNavbar from '../../components/layout/AdminNavbar';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import Modal from '../../components/ui/Modal';
 import { Clock, Plus, Edit2, Trash2, AlertCircle } from 'lucide-react';
-import { getDayName, getLanguageName, translateMassType, DAY_ORDER } from '../../utils/translations';
+import { getDayName, getLanguageName, translateMassType, DAY_ORDER, formatTime } from '../../utils/translations';
 
 /**
  * Mass Times Management Page
@@ -257,7 +257,7 @@ const MassTimesPage = () => {
                         <div className="flex-1">
                           <div className="flex items-center gap-4 mb-2">
                             <span className="text-2xl font-bold text-primary-600">
-                              {mass.time}
+                              {formatTime(mass.time)}
                             </span>
                             <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
                               {getLanguageName(mass.language)}
@@ -534,7 +534,7 @@ const MassTimesPage = () => {
           {selectedMass && (
             <div className="bg-gray-50 p-4 rounded-lg">
               <p className="font-semibold text-gray-900">
-                {getDayName(selectedMass.day_of_week)} à {selectedMass.time}
+                {getDayName(selectedMass.day_of_week)} à {formatTime(selectedMass.time)}
               </p>
               <p className="text-sm text-gray-600">{getLanguageName(selectedMass.language)}</p>
             </div>

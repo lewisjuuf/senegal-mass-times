@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import parishService from '../../services/parishService';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { ArrowLeft, MapPin, Phone, Globe, Mail, Clock, Newspaper, Copy, Check } from 'lucide-react';
-import { getDayName, getLanguageName, translateMassType, DAY_ORDER } from '../../utils/translations';
+import { getDayName, getLanguageName, translateMassType, DAY_ORDER, formatTime } from '../../utils/translations';
 
 // Map JS getDay() (0=Sunday) to English day names
 const JS_DAY_TO_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -98,7 +98,7 @@ const ParishDetailPage = () => {
   const handleWhatsAppShare = () => {
     const lines = [`${parish.name} - ${parish.city}`];
     if (nextMass) {
-      lines.push(`Prochaine messe: ${nextMass.dayFr} à ${nextMass.mass.time}`);
+      lines.push(`Prochaine messe: ${nextMass.dayFr} à ${formatTime(nextMass.mass.time)}`);
     }
     lines.push(window.location.href);
     const text = encodeURIComponent(lines.join('\n'));
@@ -267,7 +267,7 @@ const ParishDetailPage = () => {
               <div>
                 <p className="text-sm font-medium text-primary-600 uppercase tracking-wide">Prochaine messe</p>
                 <p className="text-xl font-bold text-gray-900">
-                  {nextMass.dayFr} à {nextMass.mass.time}
+                  {nextMass.dayFr} à {formatTime(nextMass.mass.time)}
                 </p>
                 <p className="text-sm text-gray-600">
                   {getLanguageName(nextMass.mass.language)}
@@ -308,7 +308,7 @@ const ParishDetailPage = () => {
                         >
                           <div>
                             <div className="text-lg font-semibold text-gray-900">
-                              {mass.time}
+                              {formatTime(mass.time)}
                               {isNext && (
                                 <span className="ml-2 text-xs font-medium text-primary-600 bg-primary-100 px-2 py-0.5 rounded-full">
                                   Prochaine

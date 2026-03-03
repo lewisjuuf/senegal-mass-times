@@ -6,6 +6,7 @@ Handles public endpoints for viewing parishes and mass times
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
+import unicodedata
 import sys
 import os
 
@@ -15,6 +16,14 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from backend_api import get_db, Parish, ParishResponse, ParochialNews, NewsResponse
 
 router = APIRouter()
+
+
+def _strip_accents(s: str) -> str:
+    """Remove accents from a string for accent-insensitive comparison."""
+    return ''.join(
+        c for c in unicodedata.normalize('NFD', s)
+        if unicodedata.category(c) != 'Mn'
+    )
 
 
 # ============ Endpoints ============
@@ -50,26 +59,26 @@ def get_parishes(
     Returns:
         List of parishes with their mass times
     """
-    from sqlalchemy import or_
-
     query = db.query(Parish).filter(
         Parish.is_approved == True,
         Parish.is_master_admin == False,
     )
 
-    if city:
-        # Search in both parish name AND city name
-        query = query.filter(
-            or_(
-                Parish.name.ilike(f"%{city}%"),
-                Parish.city.ilike(f"%{city}%")
-            )
-        )
-
     if diocese_id:
         query = query.filter(Parish.diocese_id == diocese_id)
 
-    return query.offset(skip).limit(limit).all()
+    parishes = query.offset(skip).limit(limit).all()
+
+    if city:
+        # Accent-insensitive, case-insensitive search in both name and city
+        search_term = _strip_accents(city).lower()
+        parishes = [
+            p for p in parishes
+            if search_term in _strip_accents(p.name).lower()
+            or search_term in _strip_accents(p.city).lower()
+        ]
+
+    return parishes
 
 
 @router.get("/parishes/{parish_id}", response_model=ParishResponse)

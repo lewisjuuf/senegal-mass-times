@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import parishService from '../../services/parishService';
 import { Search, MapPin, Phone, Clock, ArrowLeft, ChevronRight } from 'lucide-react';
-import { DAYS_FR, DAY_ORDER } from '../../utils/translations';
+import { DAYS_FR, DAY_ORDER, formatTime } from '../../utils/translations';
 
 /**
  * Public Search Page with Interactive Search
@@ -356,7 +356,7 @@ const SearchPage = () => {
                                 <div className="flex flex-wrap gap-2 ml-7">
                                   {matchingMasses.map((m) => (
                                     <span key={m.id} className="inline-flex items-center px-3 py-1 bg-primary-50 text-primary-700 rounded-full text-sm font-medium">
-                                      {m.time}{m.language !== 'French' ? ` (${m.language})` : ''}
+                                      {formatTime(m.time)}{m.language !== 'French' ? ` (${m.language})` : ''}
                                     </span>
                                   ))}
                                 </div>
