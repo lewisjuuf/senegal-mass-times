@@ -1,0 +1,90 @@
+\subsection{Sparse hedging onto futures (self-contained spec)}\label{sec:hedge}
+This subsection is written to be picked up independently: an agent with the
+covariance matrix and instrument sensitivities can implement it without the
+rest of the document.
+ 
+\smallskip\noindent\textbf{Inputs.}
+\begin{itemize}
+  \item A target instrument (bond or book) with factor loadings
+        $\beta_0\in\R^m$ and residual variance $\delta_0^2$.
+  \item $n_h$ candidate hedge futures ($n_h\le 7$ here), each with factor
+        loadings $\phi_k\in\R^m$ and residual (basis) variance $b_k^2$. Stack
+        $\Phi=[\phi_1,\dots,\phi_{n_h}]\in\R^{m\times n_h}$ and
+        $B=\diag(b_1^2,\dots,b_{n_h}^2)$.
+  \item The factor covariance $\Omega\in\R^{m\times m}$.
+\end{itemize}
+All loadings and variances are in one consistent normalisation (yield-equivalent
+here); the hedge weights $w\in\R^{n_h}$ are the signed number of
+(normalised) units of each future.
+ 
+\smallskip\noindent\textbf{Objective (residual variance of the hedged book).}
+A hedge $w$ leaves the position $\beta_0-\Phi w$ in factor space, so
+\[
+  V(w)\;=\;(\beta_0-\Phi w)\T\,\Omega\,(\beta_0-\Phi w)
+  \;+\;\delta_0^2\;+\;w\T B\,w ,
+\]
+where the last term is the futures' own basis risk. Define the risk scale of
+each future $\rho_k=\sqrt{\phi_k\T\Omega\,\phi_k+b_k^2}$ (its standalone
+volatility); these are used to make selection scale-free.
+ 
+\smallskip\noindent\textbf{Unconstrained optimum} (all futures, reference
+point):
+\[
+  w^\star=\bigl(\Phi\T\Omega\,\Phi+B\bigr)^{-1}\Phi\T\Omega\,\beta_0 .
+\]
+ 
+\smallskip\noindent\textbf{Sparse hedge --- recommended method (best subset).}
+With $n_h\le7$ the subset space is tiny; enumerate rather than penalise.
+\begin{enumerate}
+  \item Fix a maximum cardinality $\kappa$ (e.g.\ $\kappa=3$).
+  \item For each subset $S\subseteq\{1,\dots,n_h\}$ with $|S|\le\kappa$: solve
+        the \emph{unpenalised} optimum on $S$,
+        $w_S=(\Phi_S\T\Omega\Phi_S+B_S)^{-1}\Phi_S\T\Omega\beta_0$, and record
+        $V(w_S)$.
+  \item Choose the subset minimising $V(w_S)+c\,|S|$, with $c$ a small
+        complexity charge (in variance units; set $c$ so a future must reduce
+        residual variance by a chosen minimum, e.g.\ a fraction of $\delta_0^2$,
+        to be included). Ties broken toward fewer names.
+\end{enumerate}
+This gives genuine sparsity \emph{and} unbiased hedge ratios on the chosen
+futures (no shrinkage), and requires no penalty tuning. It is the reference
+implementation.
+ 
+\smallskip\noindent\textbf{Sparse hedge --- penalised alternative (if a
+regression pipeline is preferred).} Minimise
+\[
+  V(w)\;+\;\lambda_1\sum_k \rho_k\,|w_k|\;+\;\lambda_2\,w\T\diag(\rho_k^2)\,w .
+\]
+Two non-negotiable details, both of which the naive LASSO omits and both of
+which cause the pathological behaviour (a large CTD weight dissolving into many
+small off-CTD weights as $\lambda$ rises):
+\begin{itemize}
+  \item \emph{Risk-scaled penalty} ($\rho_k$ weights, not raw contract units):
+        the L1 term must tax \emph{risk allocated}, not contract notional, or
+        selection is driven by DV01 conventions --- low-DV01 futures are
+        under-penalised and enter spuriously.
+  \item \emph{Elastic-net} ($\lambda_2>0$): the L2 term stops LASSO from
+        arbitrarily splitting weight among the collinear futures (Schatz/Bobl/
+        Bund/Buxl all load on level/slope), which is the source of the unstable
+        solution path.
+\end{itemize}
+Then \emph{debias}: having selected the support with the penalised fit, discard
+the penalised magnitudes and re-solve the unpenalised optimum on the selected
+subset (relaxed LASSO). Without this step the reported hedge ratios are
+shrunk toward zero --- a bias, since the goal is fewer instruments at their
+\emph{correct} ratios, not smaller ratios. After debiasing this route
+approximates best-subset; for $n_h\le7$ best-subset is simpler and exact and is
+preferred.
+ 
+\smallskip\noindent\textbf{Diagnostic for the scale pathology.} If naive LASSO
+misbehaves, print each future's $\rho_k$ (or DV01) beside its coefficient: if
+the futures that enter as $\lambda$ rises are systematically the low-$\rho_k$
+ones, contract-space penalisation is confirmed as the cause and the risk-scaled
+penalty above is mandatory.
+ 
+\smallskip\noindent\textbf{Outputs.} The selected futures and their (debiased)
+weights $w$; the achieved residual variance $V(w)$ and its ratio to the
+unhedged $\beta_0\T\Omega\beta_0+\delta_0^2$ (hedge effectiveness); and the
+weights converted from normalised units back to contracts via the futures'
+DV01s.
+ 
