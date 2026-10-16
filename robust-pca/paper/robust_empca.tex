@@ -1,0 +1,840 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=2.6cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{booktabs,enumitem,microtype}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{algorithm,algpseudocode}
+\usepackage[round,authoryear]{natbib}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+\usepackage[capitalise,noabbrev]{cleveref}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{assumption}[theorem]{Assumption}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem{example}[theorem]{Example}
+
+\DeclareMathOperator{\tr}{tr}
+\DeclareMathOperator{\spn}{span}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator{\Var}{Var}
+\DeclareMathOperator{\Cov}{Cov}
+\DeclareMathOperator{\rank}{rank}
+\DeclareMathOperator{\IF}{IF}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\V}{\mathcal{V}}
+\newcommand{\one}{\mathbf{1}}
+\newcommand{\norm}[1]{\lVert #1\rVert}
+\newcommand{\tx}{\tilde{x}}
+\newcommand{\Pp}{P_{\!\perp}}
+
+\title{Robust Principal Components of Curve Changes:\\
+S-estimation of the Principal Subspace and its\\ Implementation by Weighted EMPCA}
+\author{Technical note}
+\date{16 October 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We study principal component analysis (PCA) of daily changes of a term structure when a
+single day is an order of magnitude larger than typical days.
+We first state classical PCA in its original variance-maximisation form \citep{Hotelling1933}
+and prove its equivalence with the best affine rank-$q$ approximation
+\citep{Pearson1901,EckartYoung1936}. This equivalence shows that classical PCA minimises a
+non-robust scale (a root mean square) of the residual norms, and the influence function
+of the eigenvectors \citep{Critchley1985} quantifies the damage done by one large day.
+We then present the robust alternative of \citet{Maronna2005}, implemented as
+\texttt{pcaRobS} in the \textsf{R} package \texttt{RobStatTM} that accompanies
+\citet{MaronnaEtAl2019}: the principal subspace is the minimiser of a bounded
+M-scale of residual norms. We derive its estimating equations, the iteratively
+reweighted algorithm and a monotone-descent theorem. We then show that the same estimator is
+obtained by wrapping the weighted EMPCA of \citet{Bailey2012} in an outer reweighting loop,
+with Bailey's weights set to $W_t\,\omega_{tj}$, and we state exactly when that combined
+algorithm is guaranteed to decrease the objective. Two results bear directly on
+practice: (i) a residual-based estimator protects the \emph{subspace} but cannot protect the
+individual components against an outlier that lies \emph{inside} the subspace (a large pure
+level/slope day), which requires a second, robust rotation step; (ii) for norm-based
+down-weighting, the weight entering the scatter matrix must decay like $\norm{\tx_t}^{-2}$, not
+$\norm{\tx_t}^{-1}$. All claims are checked numerically, including an exact replication of
+\texttt{pcaRobS}.
+\end{abstract}
+
+\tableofcontents
+
+%======================================================================
+\section{Setting and notation}\label{sec:setting}
+
+We observe $n$ daily changes of a curve on $p$ fixed tenors,
+$x_t\in\R^p$, $t=1,\dots,n$, collected as rows of $X\in\R^{n\times p}$.
+Throughout, $q\in\{1,\dots,p-1\}$ is the number of components retained.
+$\norm{\cdot}$ is the Euclidean norm on vectors and the spectral norm on matrices;
+$\norm{\cdot}_F$ is the Frobenius norm.
+The Stiefel manifold is
+\[
+\V_{p,q}=\{B\in\R^{p\times q}:\ B^\top B=I_q\}.
+\]
+For $B\in\V_{p,q}$ we write $P_B=BB^\top$ for the orthogonal projector onto $\spn(B)$ and
+$\Pp=I_p-P_B$ (the dependence on $B$ is suppressed when clear).
+For a centre $\mu\in\R^p$ we write $\tx_t=x_t-\mu$ and define the \emph{residual norm} of day $t$:
+\begin{equation}\label{eq:resid}
+r_t(\mu,B)^2=\norm{\Pp(x_t-\mu)}^2=\norm{\tx_t}^2-\norm{B^\top\tx_t}^2 .
+\end{equation}
+Eigenvalues of a symmetric matrix are ordered $\lambda_1\ge\lambda_2\ge\dots\ge\lambda_p$,
+with orthonormal eigenvectors $v_1,\dots,v_p$; $V_q=[v_1,\dots,v_q]$.
+
+The motivating situation is one day $t_o$ with $\norm{\tx_{t_o}}\approx 18\times
+\operatorname{median}_t\norm{\tx_t}$. We call a day \emph{in-span} if its deviation lies (almost) in
+the true principal subspace (e.g.\ a very large parallel shift or steepening), and
+\emph{off-span} otherwise.
+
+%======================================================================
+\section{Classical PCA}\label{sec:classical}
+
+\subsection{Population definition (Hotelling)}
+
+Let $x$ be a random vector in $\R^p$ with mean $\mu=\E x$ and covariance
+$\Sigma=\E[(x-\mu)(x-\mu)^\top]$, with spectral decomposition
+$\Sigma=\sum_{j=1}^p\lambda_jv_jv_j^\top$.
+
+\begin{definition}[Principal components; \citealp{Hotelling1933}]\label{def:hotelling}
+The first principal direction is any
+\[
+a_1\in\argmax_{\norm{a}=1}\Var(a^\top x)=\argmax_{\norm{a}=1}a^\top\Sigma a .
+\]
+For $k\ge2$, the $k$-th principal direction is any
+\[
+a_k\in\argmax\bigl\{a^\top\Sigma a:\ \norm{a}=1,\ \Cov(a^\top x,a_l^\top x)=0,\ l<k\bigr\}.
+\]
+The $k$-th principal component is the random variable $z_k=a_k^\top(x-\mu)$ and its variance
+is $\Var(z_k)$.
+\end{definition}
+
+\begin{theorem}[Hotelling]\label{thm:hotelling}
+Assume $\lambda_1>\lambda_2>\dots>\lambda_q>\lambda_{q+1}\ge 0$ and $\lambda_q>0$.
+Then for $k\le q$, $a_k=\pm v_k$ and $\Var(z_k)=\lambda_k$.
+The components $z_1,\dots,z_q$ are uncorrelated and
+$\sum_{k\le q}\lambda_k/\tr\Sigma$ is the proportion of total variance they explain.
+\end{theorem}
+
+\begin{proof}
+Write $a=\sum_j\alpha_jv_j$ with $\sum_j\alpha_j^2=1$. Then $a^\top\Sigma a=\sum_j\lambda_j\alpha_j^2\le\lambda_1$,
+with equality if and only if $\alpha_j=0$ whenever $\lambda_j<\lambda_1$; since $\lambda_1>\lambda_2$,
+$a_1=\pm v_1$. Suppose $a_l=\pm v_l$ for $l<k$. Then $\Cov(a^\top x,a_l^\top x)=a^\top\Sigma v_l=\lambda_l\alpha_l$,
+so (as $\lambda_l>0$) the constraint is $\alpha_l=0$ for $l<k$. Then $a^\top\Sigma a=\sum_{j\ge k}\lambda_j\alpha_j^2\le\lambda_k$,
+with equality iff $a=\pm v_k$ (using $\lambda_k>\lambda_{k+1}$). Finally $\Var(z_k)=v_k^\top\Sigma v_k=\lambda_k$ and
+$\Cov(z_k,z_l)=v_k^\top\Sigma v_l=0$.
+\end{proof}
+
+\subsection{Sample version}
+Replacing $(\mu,\Sigma)$ by the sample mean and covariance,
+\begin{equation}\label{eq:sample}
+\bar x=\frac1n\sum_{t=1}^n x_t,\qquad
+S=\frac1{n-1}\sum_{t=1}^n(x_t-\bar x)(x_t-\bar x)^\top,
+\end{equation}
+gives the sample principal directions $\hat v_k$ (eigenvectors of $S$), sample variances
+$\hat\lambda_k$, scores $\hat z_{tk}=\hat v_k^\top(x_t-\bar x)$, and the explained-variance ratio
+$\sum_{k\le q}\hat\lambda_k/\tr S$. Numerically one uses the SVD of the centred data matrix
+$\tilde X=X-\one\bar x^\top=U D G^\top$: then $\hat v_k$ is the $k$-th column of $G$ and $\hat\lambda_k=d_k^2/(n-1)$.
+
+\subsection{Equivalent characterisations}
+
+The robust estimators below are built on a characterisation of PCA that is equivalent to
+\cref{def:hotelling} but is not its definition. We prove the equivalence.
+
+\begin{lemma}[Ky Fan maximum principle; \citealp{Fan1949}]\label{lem:kyfan}
+Let $S\in\R^{p\times p}$ be symmetric with eigenpairs $(\lambda_j,v_j)$. Then
+\[
+\max_{B\in\V_{p,q}}\tr(B^\top SB)=\sum_{j=1}^q\lambda_j,
+\]
+attained at $B=V_q$. If $\lambda_q>\lambda_{q+1}$, the maximisers are exactly the $B$ with
+$\spn(B)=\spn(V_q)$.
+\end{lemma}
+
+\begin{proof}
+Let $h_j=\norm{B^\top v_j}^2$. Then $\tr(B^\top SB)=\sum_j\lambda_j\,v_j^\top BB^\top v_j=\sum_j\lambda_jh_j$.
+Since $BB^\top$ is an orthogonal projector, $0\le h_j\le\norm{v_j}^2=1$, and
+$\sum_jh_j=\norm{B^\top[v_1,\dots,v_p]}_F^2=\norm{B}_F^2=q$.
+Maximising the linear function $\sum_j\lambda_jh_j$ over $\{0\le h_j\le1,\ \sum_jh_j=q\}$ with
+$\lambda_1\ge\dots\ge\lambda_p$ puts $h_j=1$ for $j\le q$ and $0$ otherwise, giving
+$\sum_{j\le q}\lambda_j$. If $\lambda_q>\lambda_{q+1}$, any other feasible $h$ gives a strictly smaller value,
+so $h_j=1$ ($j\le q$) is necessary, i.e.\ $v_1,\dots,v_q\in\spn(B)$; since $\dim\spn(B)=q$,
+$\spn(B)=\spn(V_q)$.
+\end{proof}
+
+\begin{theorem}[Equivalent characterisations of classical PCA]\label{thm:equiv}
+Assume $\lambda_q(S)>\lambda_{q+1}(S)$. For $(\mu,B)\in\R^p\times\V_{p,q}$ let
+\[
+L(\mu,B)=\sum_{t=1}^n r_t(\mu,B)^2=\sum_{t=1}^n\norm{\Pp(x_t-\mu)}^2 .
+\]
+The following are equivalent:
+\begin{enumerate}[label=(\roman*)]
+\item $\spn(B)=\spn(\hat v_1,\dots,\hat v_q)$ (Hotelling, sample version);
+\item $B$ maximises $\tr(B^\top SB)$ over $\V_{p,q}$;
+\item for some $\mu$, $(\mu,B)$ minimises $L$ (best affine $q$-dimensional fit; \citealp{Pearson1901});
+\item $\tilde X BB^\top$ is a best rank-$q$ approximation of $\tilde X$ in Frobenius norm \citep{EckartYoung1936}.
+\end{enumerate}
+Moreover, for fixed $B$ the minimisers of $L(\cdot,B)$ are exactly $\mu\in\bar x+\spn(B)$.
+\end{theorem}
+
+\begin{proof}
+\emph{Centre.} For fixed $B$, $L(\mu,B)=\sum_t\norm{\Pp x_t-\Pp\mu}^2$ is a least-squares problem in
+$\Pp\mu$, minimised iff $\Pp\mu=\Pp\bar x$, i.e.\ $\mu\in\bar x+\spn(B)$.
+\emph{(iii)$\Leftrightarrow$(ii).} At such $\mu$, using \eqref{eq:resid},
+$\min_\mu L(\mu,B)=\sum_t\norm{x_t-\bar x}^2-\sum_t\norm{B^\top(x_t-\bar x)}^2=(n-1)\{\tr S-\tr(B^\top SB)\}$.
+\emph{(ii)$\Leftrightarrow$(i)} is \cref{lem:kyfan}.
+\emph{(iii)$\Leftrightarrow$(iv).} A matrix $M$ of rank $\le q$ has its rows in some $q$-dimensional subspace
+$\spn(B)$; for fixed $\spn(B)$, $\norm{\tilde X-M}_F^2$ is minimised row by row by the orthogonal projection,
+$M=\tilde XBB^\top$, with value $L(\bar x,B)$. Hence minimising over rank-$q$ matrices is minimising
+$L(\bar x,\cdot)$ over $\V_{p,q}$.
+\end{proof}
+
+\begin{corollary}[Weighted version]\label{cor:weighted}
+Let $W_1,\dots,W_n\ge0$ with $\sum_tW_t>0$, and set $\bar x_W=\sum_tW_tx_t/\sum_tW_t$,
+$C_W=\sum_tW_t(x_t-\bar x_W)(x_t-\bar x_W)^\top$ and $L_W(\mu,B)=\sum_tW_tr_t(\mu,B)^2$.
+If $\lambda_q(C_W)>\lambda_{q+1}(C_W)$, the minimisers of $L_W$ are exactly the pairs with
+$\spn(B)$ equal to the top-$q$ eigenspace of $C_W$ and $\mu\in\bar x_W+\spn(B)$; the minimum value is
+$\tr C_W-\sum_{j\le q}\lambda_j(C_W)$.
+\end{corollary}
+\begin{proof}
+Repeat the proof of \cref{thm:equiv} with weighted sums (equivalently, apply it to the rows
+$\sqrt{W_t}(x_t-\bar x_W)$).
+\end{proof}
+
+\begin{remark}[Why (iii) is the right starting point]\label{rem:scale}
+By (iii), classical PCA chooses $(\mu,B)$ to minimise
+\[
+s_{\mathrm{LS}}(r_1,\dots,r_n)=\Bigl(\tfrac1n\textstyle\sum_tr_t^2\Bigr)^{1/2},
+\]
+the root mean square of the residual norms. $s_{\mathrm{LS}}$ is a measure of scale that a single
+observation can make arbitrarily large. Robust PCA in the sense of \citet{Maronna2005} keeps
+(iii) and replaces $s_{\mathrm{LS}}$ by a robust scale (\cref{sec:spca}). Note that (iii) estimates a
+\emph{subspace}; the individual directions inside it come from an additional step (the eigenvectors of
+$S$ restricted to the subspace). This distinction matters in \cref{sec:inspan}.
+\end{remark}
+
+%======================================================================
+\section{How one large day distorts classical PCA}\label{sec:sensitivity}
+
+\subsection{Influence function}
+
+Let $F$ be the distribution of $x$, and $F_\varepsilon=(1-\varepsilon)F+\varepsilon\delta_y$ a contamination
+by a point mass at $y$. The influence function of a functional $T$ is
+$\IF(y;T,F)=\frac{d}{d\varepsilon}T(F_\varepsilon)\big|_{\varepsilon=0}$ \citep{HampelEtAl1986}.
+
+\begin{lemma}[First-order eigen-perturbation]\label{lem:perturb}
+Let $\Sigma$ be symmetric with a simple eigenvalue $\lambda_j$ and unit eigenvector $v_j$, and
+$\Sigma(\varepsilon)=\Sigma+\varepsilon E+o(\varepsilon)$ with $E$ symmetric. Then there are differentiable
+$\lambda_j(\varepsilon)$, $v_j(\varepsilon)$ (unit, sign fixed by $v_j^\top v_j(\varepsilon)>0$) with
+\[
+\lambda_j'(0)=v_j^\top Ev_j,\qquad v_j'(0)=\sum_{k\ne j}\frac{v_k^\top Ev_j}{\lambda_j-\lambda_k}\,v_k .
+\]
+\end{lemma}
+\begin{proof}
+Differentiability of a simple eigenpair is standard \citep[Ch.~8]{GolubVanLoan2013}.
+Differentiate $\Sigma(\varepsilon)v_j(\varepsilon)=\lambda_j(\varepsilon)v_j(\varepsilon)$ at $0$:
+$Ev_j+\Sigma v_j'=\lambda_j'v_j+\lambda_jv_j'$. Pre-multiplying by $v_j^\top$ gives $\lambda_j'=v_j^\top Ev_j$;
+by $v_k^\top$, $k\ne j$, gives $v_k^\top Ev_j=(\lambda_j-\lambda_k)v_k^\top v_j'$. Differentiating
+$\norm{v_j(\varepsilon)}^2=1$ gives $v_j^\top v_j'=0$.
+\end{proof}
+
+\begin{proposition}[Influence of one observation on classical PCA; \citealp{Critchley1985}]\label{prop:IF}
+Let $z=V^\top(y-\mu)$ be the population scores of the contaminating point $y$, and let $\lambda_j$ be simple.
+Then
+\[
+\IF(y;\lambda_j,F)=z_j^2-\lambda_j,\qquad
+\IF(y;v_j,F)=\sum_{k\ne j}\frac{z_jz_k}{\lambda_j-\lambda_k}\,v_k .
+\]
+Both are unbounded in $y$ and grow quadratically in $\norm{y-\mu}$.
+\end{proposition}
+\begin{proof}
+With $\mu_\varepsilon=\mu+\varepsilon(y-\mu)$,
+$\Sigma(F_\varepsilon)=(1-\varepsilon)\{\Sigma+(\mu-\mu_\varepsilon)(\mu-\mu_\varepsilon)^\top\}
++\varepsilon(1-\varepsilon)^2(y-\mu)(y-\mu)^\top
+=\Sigma+\varepsilon\{(y-\mu)(y-\mu)^\top-\Sigma\}+O(\varepsilon^2)$.
+Apply \cref{lem:perturb} with $E=(y-\mu)(y-\mu)^\top-\Sigma$, for which $v_k^\top Ev_j=z_kz_j-\lambda_j\one\{k=j\}$.
+\end{proof}
+
+Two consequences matter here. First, the eigenvector $v_j$ is pulled towards every other $v_k$ in proportion to
+$z_jz_k/(\lambda_j-\lambda_k)$, so a large day that loads on two components rotates them into each other.
+The effect is largest for the lower components, whose eigenvalue gaps are small. Second,
+in a finite sample the day's share of total variance is
+$\pi_{t_o}=\norm{x_{t_o}-\bar x}^2/\sum_t\norm{x_t-\bar x}^2$. In the simulation of \cref{sec:numerics}
+($n=750$, one day at $18\times$ the median norm), $\pi_{t_o}=0.21$: one day out of 750 accounts for about a fifth of
+$\tr S$.
+
+\subsection{In-span versus off-span outliers}
+
+\begin{lemma}[An in-span outlier leaves the subspace invariant but rotates the components]\label{lem:inspan}
+Let $S_0$ be symmetric positive semidefinite with $\lambda_q(S_0)>\lambda_{q+1}(S_0)$ and top-$q$ eigenspace $U$.
+Let $y\in U$, $\alpha>0$ and $S_1=S_0+\alpha yy^\top$. Then
+\begin{enumerate}[label=(\alph*)]
+\item $U$ is still the top-$q$ eigenspace of $S_1$;
+\item for $j\le q$, $v_j(S_0)$ is an eigenvector of $S_1$ iff $y\perp v_j$ or $y\in\spn(v_j)$.
+\end{enumerate}
+\end{lemma}
+\begin{proof}
+(a) For $u\in U$, $S_1u=S_0u+\alpha y(y^\top u)\in U$, so $U$ and (by symmetry) $U^\perp$ are invariant.
+On $U^\perp$, $S_1=S_0$ (as $y\perp U^\perp$), with eigenvalues $\lambda_{q+1},\dots,\lambda_p$.
+On $U$, $S_1\succeq S_0$, so by Weyl's inequality its eigenvalues are $\ge\lambda_q(S_0)>\lambda_{q+1}(S_0)$.
+(b) $S_1v_j=\lambda_jv_j+\alpha(y^\top v_j)y$, which is parallel to $v_j$ iff $y^\top v_j=0$ or $y\parallel v_j$.
+\end{proof}
+
+So a huge parallel-plus-steepening day does not tilt the level--slope--curvature
+\emph{subspace}, but it mixes the level and slope \emph{loadings}. As $\alpha\to\infty$, PC1 tends to $y/\norm{y}$.
+An off-span day ($\Pp y\ne0$) does both: it tilts the subspace and rotates the components.
+
+%======================================================================
+\section{Robust scales}\label{sec:mscale}
+
+\begin{definition}[$\rho$-function]\label{def:rho}
+A $\rho$-function is $\rho:\R\to[0,1]$ that is even, continuous, nondecreasing in $|u|$, with $\rho(0)=0$,
+$\sup_u\rho(u)=1$, and strictly increasing on $\{u\ge0:\rho(u)<1\}$.
+\end{definition}
+
+\begin{example}[Bisquare]\label{ex:bisq}
+$\rho_c(u)=1-\bigl(1-(u/c)^2\bigr)^3$ for $|u|\le c$ and $\rho_c(u)=1$ otherwise.
+\texttt{pcaRobS} uses $c=1$ (we checked that \texttt{RobStatTM::rho(u,"bisquare",cc=1)} equals this formula).
+\end{example}
+
+\begin{definition}[M-scale]\label{def:mscale}
+Given $\delta\in(0,1)$ and $r=(r_1,\dots,r_n)\in[0,\infty)^n$, the M-scale $\hat\sigma(r)$ is the solution
+$\sigma>0$ of
+\begin{equation}\label{eq:mscale}
+h_r(\sigma):=\frac1n\sum_{t=1}^n\rho\Bigl(\frac{r_t}{\sigma}\Bigr)=\delta .
+\end{equation}
+\end{definition}
+
+\begin{lemma}[Existence and uniqueness]\label{lem:mscale}
+If $\#\{t:r_t>0\}>n\delta$, \eqref{eq:mscale} has a unique solution $\hat\sigma(r)>0$. Moreover
+$\hat\sigma(\beta r)=\beta\hat\sigma(r)$ for $\beta>0$, and $h_r(s)\le\delta\Rightarrow\hat\sigma(r)\le s$.
+\end{lemma}
+\begin{proof}
+$h_r$ is continuous and nonincreasing on $(0,\infty)$, with $h_r(\sigma)\to\#\{r_t>0\}/n>\delta$ as $\sigma\downarrow0$
+and $h_r(\sigma)\to0$ as $\sigma\to\infty$; by the intermediate value theorem a solution exists. If
+$h_r(\sigma)\in(0,1)$, some $r_t/\sigma$ lies in the region where $\rho$ is strictly increasing, so $h_r$ is strictly
+decreasing at $\sigma$; hence the solution is unique. Equivariance follows from $h_{\beta r}(\beta\sigma)=h_r(\sigma)$.
+For the last claim, if $\hat\sigma>s$ then $h_r(s)\ge h_r(\hat\sigma)=\delta$; combined with $h_r(s)\le\delta$ this
+gives $h_r(s)=\delta$, so $s=\hat\sigma$ by uniqueness, a contradiction.
+\end{proof}
+
+\begin{remark}[Robustness and tuning]\label{rem:bdp}
+Because $\rho\le1$, a single observation changes the left side of \eqref{eq:mscale} by at most $1/n$,
+whatever its size. The finite-sample breakdown point of $\hat\sigma$ is $\min(\delta,1-\delta)$ up to $O(1/n)$
+\citep{Huber1981,MaronnaEtAl2019}; $\delta=0.5$ maximises it. By equivariance, replacing $\rho(u)$ by $\rho(u/c)$
+multiplies $\hat\sigma$ by $c$ \emph{for every} $r$, so the minimiser in \cref{def:spca} below depends on $\delta$
+only. The constant $c$ only calibrates the value of $\sigma$.
+\end{remark}
+
+\paragraph{Weights.} Put $g(\tau)=\rho(\sqrt\tau)$ for $\tau\ge0$, so that $\rho(u)=g(u^2)$ and
+$\rho'(u)/u=2g'(u^2)$.
+
+\begin{lemma}\label{lem:gconcave}
+For the bisquare with $c=1$, $g(\tau)=1-(1-\tau)^3$ on $[0,1]$ and $g=1$ on $[1,\infty)$. $g$ is $C^1$, nondecreasing
+and concave on $[0,\infty)$, with $g'(\tau)=3(1-\tau)_+^2$.
+\end{lemma}
+\begin{proof}
+$g'(\tau)=3(1-\tau)^2$ on $[0,1]$, which equals $0$ at $\tau=1$ and matches $g'=0$ on $(1,\infty)$. $g'$ is continuous,
+nonnegative and nonincreasing, so $g$ is nondecreasing and concave.
+\end{proof}
+
+We use the normalised weight function
+\begin{equation}\label{eq:weight}
+w(\tau)=\frac{g'(\tau)}{g'(0)}=(1-\tau)_+^2\in[0,1],
+\end{equation}
+which is \texttt{Wf} in \texttt{pcaRobS}. The weight of a residual $r$ at scale $\sigma$ is $w(r^2/\sigma^2)$, and it is
+\emph{redescending}: it is exactly $0$ when $r\ge\sigma$.
+
+%======================================================================
+\section{S-estimation of the principal subspace}\label{sec:spca}
+
+\subsection{Definition}
+
+\begin{definition}[S-PCA; \citealp{Maronna2005}]\label{def:spca}
+For $\theta=(\mu,B)\in\Theta=\R^p\times\V_{p,q}$ let $r_t(\theta)$ be as in \eqref{eq:resid} and
+$\hat\sigma(\theta)=\hat\sigma(r_1(\theta),\dots,r_n(\theta))$ the M-scale of \cref{def:mscale}. The S-estimator of the
+principal subspace is
+\[
+\hat\theta\in\argmin_{\theta\in\Theta}\hat\sigma(\theta).
+\]
+\end{definition}
+
+\begin{proposition}[Basic properties]\label{prop:basic}
+\begin{enumerate}[label=(\alph*)]
+\item $\hat\sigma(\mu,B)$ depends on $B$ only through $\spn(B)$ and on $\mu$ only through $\mu+\spn(B)$.
+\item The estimator is equivariant under $x_t\mapsto \beta Qx_t+b$ with $Q$ orthogonal, $\beta>0$ and $b\in\R^p$.
+\item Replacing $\hat\sigma$ by $s_{\mathrm{LS}}$ of \cref{rem:scale} (formally $\rho(u)=u^2$, $\delta=1$)
+gives classical PCA by \cref{thm:equiv}.
+\end{enumerate}
+\end{proposition}
+\begin{proof}
+(a) $r_t$ depends on $B$ through $\Pp$, and $\Pp(\mu+Bb)=\Pp\mu$. (b) Under the map, $r_t(\beta Q\mu+b,QB)=\beta r_t(\mu,B)$,
+and $\hat\sigma$ is scale equivariant (\cref{lem:mscale}). (c) is immediate.
+\end{proof}
+
+Property (b) is orthogonal, not affine, equivariance. This suits curve data because all tenors are in the same units.
+
+\subsection{Estimating equations}
+
+\begin{theorem}[First-order conditions]\label{thm:foc}
+Let $\rho$ be as in \cref{ex:bisq} and $\theta^*$ be such that some $r_t(\theta^*)\in(0,\hat\sigma(\theta^*))$.
+Write $\sigma^*=\hat\sigma(\theta^*)$, $W_t^*=w(r_t(\theta^*)^2/\sigma^{*2})$ and $P^*=B^*B^{*\top}$.
+Then $\hat\sigma$ is differentiable at $\theta^*$, and $\theta^*$ is a stationary point of $\hat\sigma$ on $\Theta$ iff
+\begin{align}
+&\textstyle\sum_tW_t^*\,\Pp^*(x_t-\mu^*)=0, \label{eq:foc-mu}\\
+&\Pp^*\,C^*\,P^*=0,\qquad C^*=\textstyle\sum_tW_t^*(x_t-\mu^*)(x_t-\mu^*)^\top. \label{eq:foc-B}
+\end{align}
+That is, $\Pp^*\mu^*=\Pp^*\bar x_{W^*}$ and $\spn(B^*)$ is an invariant subspace of the weighted scatter $C^*$.
+These are exactly the stationarity conditions of the weighted least-squares criterion $L_{W^*}$ of
+\cref{cor:weighted} with the weights frozen at $W^*$.
+\end{theorem}
+\begin{proof}
+Define $H(\theta,\sigma)=\frac1n\sum_tg\bigl(r_t(\theta)^2/\sigma^2\bigr)-\delta$, so that $H(\theta,\hat\sigma(\theta))=0$.
+$r_t^2$ is a polynomial in $(\mu,B)$, and $g$ is $C^1$ (\cref{lem:gconcave}), so $H$ is $C^1$. Also
+$\partial_\sigma H=-\frac{2}{n\sigma^3}\sum_tg'(r_t^2/\sigma^2)\,r_t^2<0$ at $\theta^*$, because some
+$r_t\in(0,\sigma^*)$ has $g'>0$. By the implicit function theorem $\hat\sigma$ is $C^1$ near $\theta^*$, with
+\[
+\nabla_\theta\hat\sigma=-\frac{\nabla_\theta H}{\partial_\sigma H}
+=\frac{\sigma^{*}}{2\sum_tW_t^*r_t^2}\sum_tW_t^*\,\nabla_\theta r_t^2
+=\frac{\sigma^{*}}{2\sum_tW_t^*r_t^2}\,\nabla_\theta L_{W^*}(\theta^*),
+\]
+using $g'(\tau)=g'(0)w(\tau)$. Hence $\theta^*$ is stationary for $\hat\sigma$ iff it is stationary for $L_{W^*}$ with frozen weights.
+For $L_{W}$: $\nabla_\mu r_t^2=-2\Pp(x_t-\mu)$ gives \eqref{eq:foc-mu}. For fixed $\mu$,
+$L_W=\sum_tW_t\norm{\tx_t}^2-\tr(B^\top CB)$; the Euclidean gradient of $\tr(B^\top CB)$ is $2CB$, and its
+projection on the tangent space of $\V_{p,q}$ at $B$ vanishes iff $\Pp CB=0$ (this is the standard
+first-order condition for trace maximisation on the Stiefel manifold), which is \eqref{eq:foc-B} after right-multiplying by $B^\top$.
+\end{proof}
+
+\begin{remark}
+\eqref{eq:foc-B} holds for \emph{every} $q$-dimensional invariant subspace of $C^*$. Among these,
+\cref{cor:weighted} says the top-$q$ eigenspace is the global minimiser of $L_{W^*}$, which is the choice
+the algorithm makes.
+\end{remark}
+
+\subsection{Algorithm and monotone descent}
+
+\begin{algorithm}[t]
+\caption{S-PCA by iteratively reweighted least squares (\texttt{RobStatTM::pcaRobS})}\label{alg:spca}
+\begin{algorithmic}[1]
+\Require $X$, $q$, $\delta$ (default $0.5$), tolerance $\epsilon$ (default $10^{-4}$), maximum iterations $K$ (default 100)
+\State \emph{Spherical start} \citep{Locantore1999}: $\mu^0=$ spatial median; $u_t=(x_t-\mu^0)/\norm{x_t-\mu^0}$;
+$B^0=$ top-$q$ eigenvectors of $\sum_tu_tu_t^\top$
+\State $r_t\gets r_t(\mu^0,B^0)$, $\sigma\gets\hat\sigma(r)$
+\For{$k=1,\dots,K$}
+\State $W_t\gets w(r_t^2/\sigma^2)$ \Comment{weights frozen for this step}
+\State $\mu\gets\sum_tW_tx_t/\sum_tW_t$
+\State $B_{\text{new}}\gets$ top-$q$ eigenvectors of $C_W=\sum_tW_t(x_t-\mu)(x_t-\mu)^\top$
+\State $r_t\gets r_t(\mu,B_{\text{new}})$, $\sigma_{\text{new}}\gets\hat\sigma(r)$
+\State $\Delta\gets\max\bigl\{1-\sigma_{\text{new}}^2/\sigma^2,\ \operatorname{mean}|I_q-|B_{\text{new}}^\top B||\bigr\}$
+\State $B\gets B_{\text{new}}$, $\sigma\gets\sigma_{\text{new}}$; \textbf{if} $\Delta<\epsilon$ \textbf{break}
+\EndFor
+\State \Return $\mu$, $B$, scores $(x_t-\mu)^\top B$, weights $W_t$, $\sigma$
+\end{algorithmic}
+\end{algorithm}
+
+\cref{alg:spca} restates the code of \texttt{pcaRobS} (\texttt{R/RobPCA\_SM.R}, \texttt{RobStatTM} 1.0.13), which we
+read line by line. Lines 5--6 compute a global minimiser of $L_W$ for the frozen weights (\cref{cor:weighted}).
+
+\begin{theorem}[Monotone descent]\label{thm:descent}
+Let $g$ be nondecreasing and concave (\cref{lem:gconcave}). Fix $\theta_k$ with $\sigma_k=\hat\sigma(\theta_k)$
+and weights $W_t=w(r_t(\theta_k)^2/\sigma_k^2)$. If $\theta_{k+1}$ satisfies
+\begin{equation}\label{eq:decrease}
+L_W(\theta_{k+1})\le L_W(\theta_k),
+\end{equation}
+then $\hat\sigma(\theta_{k+1})\le\sigma_k$.
+\end{theorem}
+\begin{proof}
+Write $r_t=r_t(\theta_k)$ and $r_t'=r_t(\theta_{k+1})$. Concavity gives $g(b)\le g(a)+g'(a)(b-a)$, hence
+\[
+\frac1n\sum_tg\Bigl(\frac{r_t'^2}{\sigma_k^2}\Bigr)
+\le\frac1n\sum_tg\Bigl(\frac{r_t^2}{\sigma_k^2}\Bigr)+\frac{g'(0)}{n\sigma_k^2}\sum_tW_t\,(r_t'^2-r_t^2)
+=\delta+\frac{g'(0)}{n\sigma_k^2}\bigl\{L_W(\theta_{k+1})-L_W(\theta_k)\bigr\}\le\delta .
+\]
+So $h_{r'}(\sigma_k)\le\delta$, and \cref{lem:mscale} gives $\hat\sigma(r')\le\sigma_k$.
+\end{proof}
+
+\begin{corollary}\label{cor:descent}
+In \cref{alg:spca} the sequence $\sigma_k$ is nonincreasing and converges. Any limit point $\theta^*$ of the iterates
+at which the conditions of \cref{thm:foc} hold and that is a fixed point of the update is a stationary point of $\hat\sigma$.
+\end{corollary}
+\begin{proof}
+Lines 5--6 minimise $L_W$ globally, so \eqref{eq:decrease} holds and \cref{thm:descent} applies; a nonincreasing sequence
+bounded below by $0$ converges. At a fixed point, $(\mu^*,B^*)$ minimises $L_{W^*}$, so its stationarity conditions
+hold, which by \cref{thm:foc} are those of $\hat\sigma$.
+\end{proof}
+
+\begin{remark}[What is not guaranteed]
+$\hat\sigma(\theta)$ is not convex; the iteration can stop at a local minimiser. This is why the start must already be
+robust. The spherical start gives each day unit norm, so one large day carries weight $1/n$. Convergence of the iterates
+themselves, as opposed to the scale values, is not claimed.
+\end{remark}
+
+\subsection{Explained variance and component variances}
+Let $\sigma_0=\hat\sigma(\norm{x_1-\mu^0},\dots,\norm{x_n-\mu^0})$ be the M-scale of the centred norms. \texttt{pcaRobS}
+reports the robust proportion of explained variability
+\[
+\widehat{\mathrm{PEV}}=1-\hat\sigma(\hat\theta)^2/\sigma_0^2 .
+\]
+Robust variances of the individual components are best taken from the robust scatter of the scores
+(\cref{sec:stage2}). The eigenvalues of $C_W/\sum_tW_t$ are biased downwards, because the weights shrink clean days in the tails of the
+distribution more than central ones.
+
+%======================================================================
+\section{Limits of residual-based weights}\label{sec:inspan}
+
+\subsection{The individual components are not protected}
+
+\begin{proposition}\label{prop:residblind}
+Let the weights be any function of the residual, $W_t=\phi(r_t)$, with $\phi(0)=\max\phi$. If $x_{t_o}-\hat\mu\in\spn(\hat B)$
+then $r_{t_o}=0$ and day $t_o$ receives the maximal weight, whatever its size. Its contribution to $C_W$ is
+$\phi(0)\,\tx_{t_o}\tx_{t_o}^\top$, with norm $\phi(0)\norm{\tx_{t_o}}^2$, which is unbounded.
+\end{proposition}
+
+Combining this with \cref{lem:inspan}: an in-span day does not tilt the S-PCA subspace, but it rotates the eigenvectors
+of $C_W$ inside it. Because clean days have weights strictly below 1 (mean $0.62$ in our simulation) while the in-span
+day has weight $0.92$, its \emph{relative} weight is \emph{larger} than under classical PCA. Its share of $\tr C_W$ was
+$0.29$, against $0.21$ for $\tr S$. \Cref{tab:mc} confirms this: for an in-span shock, S-PCA gives PC1/PC2 errors of
+about $18^\circ$, against $13^\circ$ for classical PCA, while its subspace error is unchanged.
+
+\subsection{Second stage: robust rotation inside the subspace}\label{sec:stage2}
+
+Let $(\hat\mu,\hat B)$ be the S-PCA estimate and $s_t=\hat B^\top(x_t-\hat\mu)\in\R^q$ the scores. Let $\hat\Sigma_s$ be an
+affine-equivariant robust scatter estimator in $\R^q$. We use the reweighted MCD \citep{RousseeuwVanDriessen1999}; with
+$q=3$ and $n$ in the hundreds this is cheap and has high breakdown. With $\hat\Sigma_s=\hat V\hat\Lambda\hat V^\top$, define
+the final loadings and robust component variances as
+\begin{equation}\label{eq:stage2}
+\hat A=\hat B\hat V,\qquad \hat\lambda_k^{\mathrm{rob}}=\hat\Lambda_{kk}.
+\end{equation}
+
+\begin{proposition}[Well-posedness]\label{prop:stage2}
+$\hat A$ does not depend on the choice of orthonormal basis of $\spn(\hat B)$.
+\end{proposition}
+\begin{proof}
+Replacing $\hat B$ by $\hat BR$ with $R\in O(q)$ maps scores to $R^\top s_t$. Affine equivariance gives
+$\hat\Sigma_s\mapsto R^\top\hat\Sigma_sR$, whose eigenvectors are $R^\top\hat V$. Hence $\hat A\mapsto\hat BRR^\top\hat V=\hat A$.
+\end{proof}
+
+The in-span day has a large Mahalanobis distance in score space, so the MCD downweights it there. This is the step that
+residual weights cannot perform.
+
+%======================================================================
+\section{Huber-type and norm-capping weights: \texorpdfstring{$w$ or $w^2$}{w or w squared}?}\label{sec:huber}
+
+A common heuristic caps each day's norm with $w_t=\min(1,c/\norm{\tx_t})$. This section makes precise which power of
+this weight belongs in the scatter matrix, and why.
+
+Every IRLS scheme above solves, at its fixed point, $\Pp C_WP=0$ (\cref{thm:foc}), in which day $t$ enters through
+\[
+T_t=W_t\,\Pp\tx_t\tx_t^\top P,\qquad \norm{T_t}=W_t\,r_t\,\norm{P\tx_t},
+\]
+and the within-subspace eigenvectors are driven by $W_t\,P\tx_t\tx_t^\top P$, of norm $W_t\norm{P\tx_t}^2$.
+Take an outlier $\tx=s\,u$ with $\norm u=1$ and let $s\to\infty$ at a fixed $(\mu,B)$.
+
+\begin{proposition}\label{prop:huber}
+Assume $Pu\ne0$ and $\Pp u\ne0$ (an off-span outlier that also loads on the components).
+\begin{enumerate}[label=(\alph*)]
+\item Classical ($W\equiv1$): $\norm{T}=s^2\norm{\Pp u}\norm{Pu}$, quadratic in $s$.
+\item Huber M-estimator of the residuals with fixed scale $\sigma$: $\rho_H(u)=u^2/2$ for $|u|\le c$ and $c|u|-c^2/2$
+otherwise. Here $g_H$ is concave, so \cref{thm:descent} applies with fixed scale, and the IRLS weight is
+$W=\min(1,c\sigma/r)$. Then $\norm{T}=\min(r,c\sigma)\norm{P\tx}=c\sigma s\norm{Pu}$ for large $s$, linear in $s$.
+This is the leverage effect familiar from Huber regression: $\psi$ is bounded but the leverage $\norm{P\tx}$ is not.
+\item Bisquare residual weights (S-PCA): $T=0$ once $r=s\norm{\Pp u}\ge\sigma$.
+\item Norm weights $W=\min(1,c/\norm{\tx})^{m}$: for large $s$, $\norm{T}=c^m s^{2-m}\norm{\Pp u}\norm{Pu}$. This is
+bounded (by $c^2/2$) for $m=2$ and linear in $s$ for $m=1$. The within-subspace term $W\norm{P\tx}^2$ behaves the same way.
+\end{enumerate}
+\end{proposition}
+\begin{proof}
+Direct substitution. Use $r=s\norm{\Pp u}$, $\norm{P\tx}=s\norm{Pu}$ and
+$r\norm{P\tx}\le\tfrac12(r^2+\norm{P\tx}^2)=\tfrac12\norm{\tx}^2$. For (b), $g_H(\tau)=\tau/2$ on $[0,c^2]$ and
+$c\sqrt\tau-c^2/2$ beyond, so $g_H'(\tau)=\frac12\min(1,c/\sqrt\tau)$ is nonincreasing.
+\end{proof}
+
+\begin{remark}[Answer to ``$w$ or $w^2$'']
+With norm-based capping $w_t=\min(1,c/\norm{\tx_t})$, the scatter matrix must be built as
+$\sum_tw_t^2\tx_t\tx_t^\top$, i.e.\ rows scaled by $w_t$. In Bailey's notation the weight is $W_{tj}=w_t^2$.
+This is a Huber-type M-estimator of scatter whose weight $u(d^2)=\min(1,c^2/d^2)$ is a function of the
+\emph{squared} distance with $d^2u(d^2)$ bounded, as in \citet{Maronna1976}, but with the shape matrix fixed at $I$.
+Using $W_{tj}=w_t$ leaves a contribution that grows linearly in $\norm{\tx_t}$ (\cref{tab:mc}: $5.8^\circ$ against
+$2.1^\circ$). Norm weights also downweight in-span days, but they never redescend to zero, so they are not a
+high-breakdown method. The spherical limit $u(d^2)=1/d^2$ gives every day the same unit contribution \citep{Locantore1999}.
+\end{remark}
+
+%======================================================================
+\section{Implementation by weighted EMPCA}\label{sec:empca}
+
+\subsection{Bailey's weighted EMPCA, as implemented}
+
+\citet{Bailey2012} fits, to data that have been \emph{centred beforehand}, the model $x_i\approx\sum_kc_{ik}\phi_k$ by minimising
+\begin{equation}\label{eq:chi2}
+\chi^2(C,\Phi)=\sum_{i=1}^n\sum_{j=1}^p\omega_{ij}\Bigl(x_{ij}-\sum_{k=1}^qc_{ik}\phi_{kj}\Bigr)^2,
+\end{equation}
+where $\omega_{ij}\ge0$ are inverse noise variances and $\omega_{ij}=0$ encodes a missing value. Here
+$\Phi\in\R^{q\times p}$ has rows $\phi_k$ (so $B=\Phi^\top$) and $C\in\R^{n\times q}$. From the reference code
+(\texttt{empca.py}, \url{https://github.com/sbailey/empca}), one iteration is:
+\begin{enumerate}[label=(\arabic*)]
+\item \emph{E-step} (\texttt{solve\_coeffs}): for each $i$,
+$c_i=(\Phi\Omega_i\Phi^\top)^{-1}\Phi\Omega_ix_i$, with $\Omega_i=\operatorname{diag}(\omega_{i\cdot})$. If
+$\omega_{i\cdot}$ is constant across $j$, the code uses $c_i=\Phi x_i$, which is equivalent because $\Phi$ is orthonormal.
+\item \emph{M-step} (\texttt{solve\_eigenvectors}): for $k=1,\dots,q$ in turn,
+$\phi_{kj}\gets\sum_i\omega_{ij}c_{ik}x^{(k)}_{ij}/\sum_i\omega_{ij}c_{ik}^2$ for all $j$. Then deflate,
+$x^{(k+1)}_{i}=x^{(k)}_i-c_{ik}\phi_k$ (starting from $x^{(1)}=x$).
+\item Gram--Schmidt orthonormalisation of $\phi_1,\dots,\phi_q$.
+\end{enumerate}
+The code starts from random orthonormal vectors and runs a fixed number of iterations (25 by default); it
+does not estimate a mean. A joint alternative (\texttt{lower\_rank} in the same file, the criss-cross regression of
+\citealp{GabrielZamir1979}) solves, for each $j$, the weighted least-squares problem for the whole column
+$\phi_{\cdot j}$ at once.
+
+\subsection{Row-constant weights reproduce the weighted eigenproblem}
+
+\begin{proposition}\label{prop:bailey}
+Let $\omega_{ij}=W_i\ge0$ (one weight per day), let the data be centred, let $C_W=\sum_iW_ix_ix_i^\top$, and suppose all
+denominators in step (2) are nonzero. Then:
+\begin{enumerate}[label=(\alph*)]
+\item the global minimisers of \eqref{eq:chi2} are those with $\spn(\Phi^\top)$ equal to the top-$q$ eigenspace of $C_W$
+(if $\lambda_q>\lambda_{q+1}$);
+\item an orthonormal $q$-tuple $(\phi_1,\dots,\phi_q)$ is a fixed point of Bailey's iteration (1)--(3) iff each $\phi_k$ is an
+eigenvector of $C_W$ with a positive eigenvalue.
+\end{enumerate}
+\end{proposition}
+\begin{proof}
+(a) With $\omega_{ij}=W_i$, $\chi^2=\sum_iW_i\norm{x_i-\Phi^\top c_i}^2$. For fixed $\Phi$ the optimal $c_i$ is the projection,
+so $\min_C\chi^2=L_W(0,\Phi^\top)$, and \cref{cor:weighted} with $\mu=0$ (the data are centred) applies.
+(b) The E-step gives $c_{ik}=\phi_k^\top x_i$, so the step-(2) numerator for $k=1$ is
+$\sum_iW_ic_{i1}x_i=C_W\phi_1$ and the denominator is $\phi_1^\top C_W\phi_1$.
+\emph{If} $C_W\phi_k=\lambda_k\phi_k$ for all $k$, then $\phi_1$ is unchanged. Inductively,
+$x^{(k)}=(I-\sum_{l<k}\phi_l\phi_l^\top)x$, so the update is
+$(I-\sum_{l<k}\phi_l\phi_l^\top)C_W\phi_k/\lambda_k=\phi_k$; Gram--Schmidt leaves an orthonormal set unchanged.
+\emph{Conversely}, at a fixed point the normalised update of $\phi_1$ is $C_W\phi_1/\norm{C_W\phi_1}=\phi_1$, so $\phi_1$ is an
+eigenvector. If $\phi_1,\dots,\phi_{k-1}$ are eigenvectors and $\phi_k\perp\phi_l$ for $l<k$, then
+$(I-\sum_{l<k}\phi_l\phi_l^\top)C_W\phi_k=C_W\phi_k$, because $\phi_l^\top C_W\phi_k=\lambda_l\phi_l^\top\phi_k=0$. The fixed-point
+condition then makes $\phi_k$ an eigenvector.
+\end{proof}
+
+So with one weight per day, Bailey's EMPCA computes the eigenvectors of the weighted scatter. This is lines 5--6 of
+\cref{alg:spca}, provided the centring is done with the same weights. The iteration is a deflated power method;
+its fixed points include all eigenvector tuples, and in practice it converges to the leading ones, which we verify
+numerically ($0.004^\circ$ from \cref{alg:spca}, \cref{tab:valid}).
+
+\subsection{Robust EMPCA}
+
+General $\omega_{tj}$, for heteroskedastic tenors or missing quotes, require a residual norm that is comparable across
+days with different numbers $m_t=\#\{j:\omega_{tj}>0\}$ of observed tenors. We define
+\begin{equation}\label{eq:resid-omega}
+\bar\omega_{tj}=\frac{p}{m_t}\,\omega_{tj},\qquad
+r_t(\mu,\Phi,c_t)^2=\sum_{j=1}^p\bar\omega_{tj}\Bigl(x_{tj}-\mu_j-\sum_kc_{tk}\phi_{kj}\Bigr)^2 .
+\end{equation}
+If the residuals are homoscedastic noise with variances $1/\omega_{tj}$, then $\E r_t^2=p$ for every $t$, whatever $m_t$.
+When $\omega\equiv1$ and $c_t$ is the projection, \eqref{eq:resid-omega} reduces to \eqref{eq:resid}. The S-objective
+is $\hat\sigma(r_1,\dots,r_n)$ minimised over $(\mu,\Phi,C)$, and the frozen-weight criterion is
+\begin{equation}\label{eq:LW-omega}
+L_W(\mu,\Phi,C)=\sum_t\sum_jW_t\,\bar\omega_{tj}\Bigl(x_{tj}-\mu_j-\sum_kc_{tk}\phi_{kj}\Bigr)^2,
+\end{equation}
+which is Bailey's $\chi^2$ with weights $W_t\bar\omega_{tj}$, plus a centre.
+
+\begin{algorithm}[t]
+\caption{Robust EMPCA (outer M-scale reweighting, inner weighted EMPCA)}\label{alg:rempca}
+\begin{algorithmic}[1]
+\Require $X$, $\omega$, $q$, $\delta$, inner sweeps $m$ (we use 5), tolerance $\epsilon$
+\State $\mu^0_j=$ median of observed $x_{\cdot j}$; $z_t=(x_t-\mu^0)/r_t^0$ on observed cells, with $r_t^0$ from \eqref{eq:resid-omega} at $\Phi=0$
+\State $\Phi\gets$ Bailey EMPCA of $z$ with weights $\omega$ \Comment{spherical start}
+\State E-step on $x-\mu^0$; $r_t\gets$ \eqref{eq:resid-omega}; $\sigma\gets\hat\sigma(r)$
+\Repeat
+\State $W_t\gets w(r_t^2/\sigma^2)$ \Comment{outer step: frozen day weights}
+\For{$m$ sweeps} \Comment{inner step: each update lowers $L_W$}
+\State centre: $\mu_j\gets\sum_tW_t\bar\omega_{tj}(x_{tj}-(\Phi^\top c_t)_j)\big/\sum_tW_t\bar\omega_{tj}$
+\State E-step: $c_t\gets(\Phi\bar\Omega_t\Phi^\top)^{-1}\Phi\bar\Omega_t(x_t-\mu)$ \Comment{$W_t$ cancels}
+\State M-step: \emph{exact} $\phi_{\cdot j}\gets(C^\top D_jC)^{-1}C^\top D_j(x_{\cdot j}-\mu_j)$, $D_j=\operatorname{diag}(W_t\bar\omega_{tj})$; then QR-orthonormalise $\Phi^\top$
+\State \phantom{M-step: }(or Bailey's sequential step (2)--(3), see \cref{rem:bailey-step})
+\State E-step again
+\EndFor
+\State $r_t\gets$ \eqref{eq:resid-omega}; $\sigma_{\text{new}}\gets\hat\sigma(r)$
+\Until{$|\sigma-\sigma_{\text{new}}|\le\epsilon\sigma$}
+\State Stage 2 (\cref{sec:stage2}): robust scatter of the scores $c_t$, rotate $\Phi^\top$ to $\hat A$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{theorem}[Descent for robust EMPCA]\label{thm:rempca}
+In \cref{alg:rempca} with the exact M-step, the outer scales satisfy $\sigma_{k+1}\le\sigma_k$.
+\end{theorem}
+\begin{proof}
+With $W$ frozen, each inner update minimises $L_W$ exactly over one block. The centre update minimises over $\mu$
+(per column, a weighted mean). The E-step minimises over each $c_t$ (a weighted least-squares problem; $W_t$ is a common
+factor of the row and cancels). The exact M-step minimises over each column $\phi_{\cdot j}$. The QR step replaces
+$\Phi^\top$ by $Q=\Phi^\top R^{-1}$ and, through the following E-step, leaves $\min_C L_W$ unchanged because it preserves
+$\spn(\Phi^\top)$. So $L_W$ is nonincreasing across the inner loop, which is \eqref{eq:decrease} in the variables
+$(\mu,\Phi,C)$. The proof of \cref{thm:descent} goes through verbatim with $r_t$ from \eqref{eq:resid-omega}.
+\end{proof}
+
+\begin{remark}[Bailey's sequential M-step]\label{rem:bailey-step}
+Step (2) updates $\phi_k$ against data deflated by components $l<k$ only; it is not a block minimisation of
+\eqref{eq:chi2}. So \cref{thm:rempca} does not cover it. With missing values we observed small increases of $L_W$
+(up to $6\times10^{-4}$ relative) and of $\sigma$ (up to $3\times10^{-4}$) in 8 of 10 runs, with no effect on accuracy
+(\cref{tab:missing}). With one weight per day and no missing data, \cref{prop:bailey} shows Bailey's step targets the
+right eigenvectors. To keep the guarantee in general, use the exact column update, or accept a Bailey step only if
+$L_W$ decreases.
+\end{remark}
+
+\begin{remark}[What changes relative to plain Bailey EMPCA]
+(i) Bailey's weights become $W_t\bar\omega_{tj}$, with $W_t$ recomputed in an outer loop from the M-scale of the
+residual norms. (ii) The centre is re-estimated inside the loop with the same weights; it is \emph{not} the raw column
+mean, which the large day would contaminate. (iii) The start is spherical, not random, so that the first weights are
+already robust. (iv) With general $\omega$, \eqref{eq:LW-omega} is non-convex and may have several local minima
+\citep{SrebroJaakkola2003}, which is another reason for a robust start. (v) The final basis is rotated by Stage 2;
+with the exact M-step the QR basis is arbitrary inside the subspace anyway. (vi) Bailey's $R^2$ is not robust (the code's
+docstring says so), so report $\widehat{\mathrm{PEV}}$ or the Stage-2 variances.
+\end{remark}
+
+\begin{remark}[Related estimators]
+\citet{MaronnaYohai2008} fit a robust rank-$q$ approximation by alternating M-regressions with \emph{cell-wise} weights.
+That is the natural extension if individual quotes, rather than whole days, are bad. \citet{BoenteSalibian2015} minimise a sum
+of coordinate-wise M-scales of the residuals. Projection-pursuit \citep{CrouxRuizGazen2005} and ROBPCA \citep{HubertEtAl2005}
+are useful benchmarks.
+\end{remark}
+
+%======================================================================
+\section{Numerical verification}\label{sec:numerics}
+
+\paragraph{Design.} $p=10$ tenors $\tau\in\{0.25,0.5,1,2,3,5,7,10,20,30\}$; true loadings $L$ are the orthonormalised
+Nelson--Siegel level, slope and curvature vectors; $x_t=Lf_t+e_t$ with $f_t\sim N(0,\operatorname{diag}(6^2,3^2,1.5^2))$,
+$e_t\sim N(0,0.4^2I)$, $n=750$, $q=3$. Day 400 is replaced by $18\times$ the median centred norm times a unit vector $u$.
+For an \emph{off-span} shock, $u\propto(1,1,1,1,-0.3,\dots,-1)$; for an \emph{in-span} shock, $u\propto L_{\cdot1}+L_{\cdot2}$ (level plus
+slope). Errors are the largest principal angle between $\spn(\hat B)$ and $\spn(L)$ (``subspace'') and the angles between
+matched individual loadings (``PC1--PC3''), in degrees, over 30 replications. Python code, the \texttt{RobStatTM} 1.0.13
+source, and Bailey's \texttt{empca.py} were run in the same environment.
+
+\begin{table}[ht]\centering
+\caption{Validation (one data set, off-span shock).}\label{tab:valid}
+\begin{tabular}{lr}\toprule
+Comparison & Angle (deg.)\\\midrule
+\cref{alg:spca} (Python) vs.\ \texttt{RobStatTM::pcaRobS} (R), subspace & $7\times10^{-6}$\\
+\cref{alg:rempca} (Bailey inner step) vs.\ \cref{alg:spca}, subspace & $0.004$\\
+Weight given to the shock day (both algorithms) & $0$\\
+$\sigma$ path of \cref{alg:spca}: $2.2445\to2.2395\to2.2394\to2.2394$ & monotone\\\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[ht]\centering
+\caption{Monte Carlo errors (degrees): mean over 30 replications, with the maximum in parentheses for the subspace.}\label{tab:mc}
+\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrr@{\quad}rrrr}\toprule
+& \multicolumn{4}{c}{Off-span shock} & \multicolumn{4}{c}{In-span shock (level+slope)}\\
+\cmidrule(lr){2-5}\cmidrule(lr){6-9}
+Method & Subspace & PC1 & PC2 & PC3 & Subspace & PC1 & PC2 & PC3\\\midrule
+Classical PCA & 13.06 (14.4) & 2.42 & 15.27 & 15.76 & 1.57 (2.1) & 13.29 & 13.31 & 1.77\\
+Classical, day removed & 1.60 (2.1) & 1.35 & 1.76 & 1.94 & 1.60 (2.1) & 1.35 & 1.76 & 1.94\\
+Norm cap, $W=w$ & 5.79 (7.0) & 1.47 & 6.54 & 6.98 & 1.59 (2.1) & 3.40 & 3.56 & 1.86\\
+Norm cap, $W=w^2$ & 2.06 (2.9) & 1.37 & 2.36 & 2.55 & 1.59 (2.1) & 1.56 & 1.93 & 1.92\\
+S-PCA (\cref{alg:spca}) & 1.66 (2.3) & 1.37 & 1.91 & 2.09 & 1.63 (2.3) & 18.35 & 18.37 & 1.86\\
+S-PCA + Stage 2 & 1.66 (2.3) & 1.76 & 2.52 & 2.36 & 1.63 (2.3) & 1.79 & 2.43 & 2.37\\
+Robust EMPCA (\cref{alg:rempca}) & 1.66 (2.3) & 1.38 & 1.92 & 2.09 & 1.63 (2.3) & 18.31 & 18.33 & 1.86\\
+Robust EMPCA + Stage 2 & 1.66 (2.3) & 1.76 & 2.52 & 2.36 & 1.63 (2.3) & 1.79 & 2.43 & 2.37\\\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[ht]\centering
+\caption{10\% of cells missing at random (off-span shock, 10 replications); subspace error in degrees.}\label{tab:missing}
+\begin{tabular}{lccl}\toprule
+Method & Mean & Max & $\sigma$ path\\\midrule
+Bailey EMPCA, non-robust & 13.40 & -- & --\\
+Robust EMPCA, Bailey M-step & 1.61 & 2.23 & up slightly, 8/10 runs\\
+Robust EMPCA, exact M-step & 1.59 & 2.22 & monotone, 10/10\\\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[ht]\centering
+\caption{Efficiency on clean data (no shock), mean subspace error over 30 replications.}\label{tab:eff}
+\begin{tabular}{lccccc}\toprule
+& Classical & Norm cap $w^2$ & S-PCA $\delta=0.1$ & $\delta=0.25$ & $\delta=0.5$\\\midrule
+Error (deg.) & 1.599 & 1.599 & 1.599 & 1.605 & 1.661\\\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Reading the tables.}
+(1) The robust EMPCA of \cref{alg:rempca} matches \texttt{pcaRobS} and gives the shock day weight $0$.
+(2) Off-span shocks are fully handled by residual-based methods. In-span shocks are not, at the level of individual
+components: Stage 2 is needed and brings the errors back to within about $1^\circ$ of an oracle that deletes the day. With the MCD it
+costs a little accuracy on off-span data (about $0.4^\circ$ per component); a more efficient robust scatter (e.g.\ an
+MM-estimator) would reduce that.
+(3) Norm capping with $W=w^2$ is a good, simple estimator in both cases; $W=w$ removes only about half of the
+distortion. (4) The robustness of $\delta=0.5$ costs little efficiency here; with one known outlier, $\delta=0.25$ is
+equally safe and slightly more efficient.
+
+%======================================================================
+\section{Recommended procedure}\label{sec:recipe}
+\begin{enumerate}
+\item Check the large day for data errors (roll, rebase, stale print). Robust estimation is not a substitute for clean data.
+\item Estimate the subspace by \cref{alg:rempca}. Use Bailey weights $W_t\bar\omega_{tj}$, an exact (or safeguarded)
+M-step, a weighted centre inside the loop, a spherical start, and $\delta\in[0.25,0.5]$.
+\item Rotate inside the subspace with a robust scatter of the scores (Stage 2, \cref{sec:stage2}). Report $\hat A$ and
+$\hat\lambda^{\mathrm{rob}}$.
+\item Report $\widehat{\mathrm{PEV}}$, the day weights $W_t$ (the large day should be near 0 if off-span), and, for comparison
+with legacy numbers, the classical variances of the raw data projected on $\hat A$.
+\item Cross-check the subspace against \texttt{RobStatTM::pcaRobS} on the complete-data days.
+\end{enumerate}
+
+%======================================================================
+\begin{thebibliography}{99}\small
+\bibitem[Bailey(2012)]{Bailey2012}
+Bailey, S. (2012). Principal component analysis with noisy and/or missing data.
+\emph{Publications of the Astronomical Society of the Pacific} 124, 1015--1023. doi:10.1086/668105.
+\bibitem[Boente and Salibi\'an-Barrera(2015)]{BoenteSalibian2015}
+Boente, G.\ and Salibi\'an-Barrera, M. (2015). S-estimators for functional principal component analysis.
+\emph{Journal of the American Statistical Association} 110(511), 1100--1111.
+\bibitem[Critchley(1985)]{Critchley1985}
+Critchley, F. (1985). Influence in principal components analysis. \emph{Biometrika} 72(3), 627--636.
+\bibitem[Croux and Ruiz-Gazen(2005)]{CrouxRuizGazen2005}
+Croux, C.\ and Ruiz-Gazen, A. (2005). High breakdown estimators for principal components: the projection-pursuit
+approach revisited. \emph{Journal of Multivariate Analysis} 95, 206--226.
+\bibitem[Eckart and Young(1936)]{EckartYoung1936}
+Eckart, C.\ and Young, G. (1936). The approximation of one matrix by another of lower rank. \emph{Psychometrika} 1, 211--218.
+\bibitem[Fan(1949)]{Fan1949}
+Fan, K. (1949). On a theorem of Weyl concerning eigenvalues of linear transformations I.
+\emph{Proceedings of the National Academy of Sciences} 35, 652--655.
+\bibitem[Gabriel and Zamir(1979)]{GabrielZamir1979}
+Gabriel, K.R.\ and Zamir, S. (1979). Lower rank approximation of matrices by least squares with any choice of weights.
+\emph{Technometrics} 21, 489--498.
+\bibitem[Golub and Van Loan(2013)]{GolubVanLoan2013}
+Golub, G.H.\ and Van Loan, C.F. (2013). \emph{Matrix Computations}, 4th ed. Johns Hopkins University Press.
+\bibitem[Hampel et~al.(1986)]{HampelEtAl1986}
+Hampel, F.R., Ronchetti, E.M., Rousseeuw, P.J.\ and Stahel, W.A. (1986). \emph{Robust Statistics: The Approach Based on
+Influence Functions}. Wiley.
+\bibitem[Hotelling(1933)]{Hotelling1933}
+Hotelling, H. (1933). Analysis of a complex of statistical variables into principal components.
+\emph{Journal of Educational Psychology} 24, 417--441 and 498--520.
+\bibitem[Huber(1981)]{Huber1981}
+Huber, P.J. (1981). \emph{Robust Statistics}. Wiley.
+\bibitem[Hubert et~al.(2005)]{HubertEtAl2005}
+Hubert, M., Rousseeuw, P.J.\ and Vanden Branden, K. (2005). ROBPCA: a new approach to robust principal component
+analysis. \emph{Technometrics} 47, 64--79.
+\bibitem[Locantore et~al.(1999)]{Locantore1999}
+Locantore, N., Marron, J.S., Simpson, D.G., Tripoli, N., Zhang, J.T.\ and Cohen, K.L. (1999). Robust principal
+components for functional data. \emph{Test} 8, 1--28.
+\bibitem[Maronna(1976)]{Maronna1976}
+Maronna, R.A. (1976). Robust M-estimators of multivariate location and scatter. \emph{Annals of Statistics} 4, 51--67.
+\bibitem[Maronna(2005)]{Maronna2005}
+Maronna, R. (2005). Principal components and orthogonal regression based on robust scales. \emph{Technometrics} 47, 264--273.
+\bibitem[Maronna and Yohai(2008)]{MaronnaYohai2008}
+Maronna, R.\ and Yohai, V. (2008). Robust lower-rank approximation of data matrices with element-wise contamination.
+\emph{Technometrics} 50, 295--304.
+\bibitem[Maronna et~al.(2019)]{MaronnaEtAl2019}
+Maronna, R.A., Martin, R.D., Yohai, V.J.\ and Salibi\'an-Barrera, M. (2019). \emph{Robust Statistics: Theory and Methods
+(with R)}, 2nd ed. Wiley. Companion package \texttt{RobStatTM}, \url{https://github.com/msalibian/RobStatTM}.
+\bibitem[Pearson(1901)]{Pearson1901}
+Pearson, K. (1901). On lines and planes of closest fit to systems of points in space.
+\emph{Philosophical Magazine} (6) 2, 559--572.
+\bibitem[Rousseeuw and Van Driessen(1999)]{RousseeuwVanDriessen1999}
+Rousseeuw, P.J.\ and Van Driessen, K. (1999). A fast algorithm for the minimum covariance determinant estimator.
+\emph{Technometrics} 41, 212--223.
+\bibitem[Srebro and Jaakkola(2003)]{SrebroJaakkola2003}
+Srebro, N.\ and Jaakkola, T. (2003). Weighted low-rank approximations. \emph{Proceedings of ICML}, 720--727.
+\end{thebibliography}
+
+\end{document}
