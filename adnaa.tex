@@ -48,15 +48,15 @@
 
 \title{A Censored Cover Model for RFQ Pricing\\[3pt]
 \large Fair charge, win probability, daily calibration and intraday filtering\\[2pt]
-\normalsize Technical specification --- draft v0.4}
+\normalsize Technical specification --- draft v0.5}
 \author{}
-\date{26 October 2026}
+\date{27 October 2026}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-We specify a model for dealer-to-client bond RFQs that delivers, for every inquiry, (i) a \emph{fair charge}, defined as the median of the best competing charge over a reference mid, and (ii) a full win-probability curve $s\mapsto\Prob(\text{win}\mid s)$. The latent object is the \emph{cover} $C$, the best competing charge. Wins, wins with a disclosed cover, losses matched to the public tape and losses without a level are all treated as partial (censored) observations of this one quantity. The cover follows a smallest-extreme-value (Gumbel-min) law. Section~\ref{sec:distribution} motivates this choice from the structure of the data (the cover is a minimum of competing quotes, and most observations are censored), derives its properties and maps each record type onto it. The fair charge is multiplicative: a per-bond fair charge at a reference size, made of a per-country maturity curve with a curvature penalty between consecutive maturities times an idiosyncratic bond spread, times a size curve and multipliers for tier, client, venue, side and trading session. Liquidity, age and similar bond characteristics are not modelled explicitly; they are absorbed by the idiosyncratic spread. Each morning the model is fitted by penalised maximum likelihood with partial pooling; during the day a subset of log-effects is treated as a random-walk state and updated after each resolved inquiry with a rank-one Laplace filter.
+We specify a model for dealer-to-client bond RFQs that delivers, for every inquiry, (i) a \emph{fair charge}, defined as the median of the best competing charge over a reference mid, and (ii) a full win-probability curve $s\mapsto\Prob(\text{win}\mid s)$. The latent object is the \emph{cover} $C$, the best competing charge. Wins, wins with a disclosed cover, losses matched to the public tape and losses without a level are all treated as partial (censored) observations of this one quantity. The cover follows a smallest-extreme-value (Gumbel-min) law. Section~\ref{sec:distribution} motivates this choice from the structure of the data (the cover is a minimum of competing quotes, and most observations are censored), derives its properties and maps each record type onto it. The fair charge is multiplicative: a per-bond fair charge at a reference size, made of a per-country maturity curve with a curvature penalty between consecutive maturities times an idiosyncratic bond spread, times a size curve and multipliers for client tier, client, side and trading session. Liquidity, age and similar bond characteristics are not modelled explicitly; they are absorbed by the idiosyncratic spread. Each morning the model is fitted by penalised maximum likelihood with partial pooling; during the day a subset of log-effects is treated as a random-walk state and updated after each resolved inquiry with a rank-one Laplace filter.
 \end{abstract}
 
 \begin{principle}
@@ -83,7 +83,7 @@ An inquiry $i$ is a request for quote received at time $t_i$. It carries:
 \toprule
 b(i) & bond, with country $g(b)$ and time to maturity $T_b$ (years, recomputed daily) \\
 c(i),\,k(i) & client and client tier, $k(i)=k(c(i))$ \\
-v(i) & venue \\
+v(i) & venue (not a model effect in v1; used for data mapping and diagnostics, \S\ref{sec:tiervenue}) \\
 p(i) & trading session: pre (before 08:15), core, post (from 16:30); Section~\ref{sec:session} \\
 d_i\in\{+1,-1\} & side: $+1$ if the client buys (we offer), $-1$ if the client sells (we bid) \\
 q_i & nominal size; $q^\star_b$ is the reference size for bond $b$ (desk convention, e.g.\ per country) \\
@@ -145,7 +145,7 @@ The document uses the vocabulary of survival analysis and of English-language st
 \item the \textbf{location} is $F_i$, the fair charge, centred so that it is the \emph{median} of the cover: quoting $F_i$ wins half the time given trade;
 \item the \textbf{scale} is $\sigma_i$, in bp: the width of the win curve, i.e.\ how many bp it takes for the win probability to go from high to low (one $\sigma_i$ wider than fair wins 15\%, one $\sigma_i$ tighter wins 77\%).
 \end{itemize}
-``Modelling the location'' therefore means modelling how the fair charge depends on bond, size, client, venue and so on (Section~\ref{sec:location}); ``modelling the scale'' means modelling how steep the win curve is. A \emph{location family} is the special case where the scale is held fixed and only the location varies.
+``Modelling the location'' therefore means modelling how the fair charge depends on bond, size, client, session and so on (Section~\ref{sec:location}); ``modelling the scale'' means modelling how steep the win curve is. A \emph{location family} is the special case where the scale is held fixed and only the location varies.
 \item[Survival function] (\emph{fonction de survie}). $S(y)=\Prob(C>y)$, one minus the distribution function (\emph{fonction de répartition}). Here $S(s)$ is the probability of winning at charge $s$, given that the client trades.
 \item[Hazard and cumulative hazard] (\emph{taux de hasard}, \emph{hasard cumulé}). $\lambda(y)=f(y)/S(y)$ and $\Lambda(y)=-\ln S(y)$. Here: the rate at which the chance of winning is lost per additional bp of charge, and its integral.
 \item[Censoring] (\emph{censure}). An observation is \emph{right-censored} when we only know that $C>s$ (a win), \emph{left-censored} when we only know that $C<s$ (a loss without a level), and \emph{interval-censored} when we know that $L<C\le U$ for two known charges (Section~\ref{sec:datamap}).
@@ -507,7 +507,7 @@ The location and scale are linear predictors on these rows:
 \begin{equation}\label{eq:design}
 \bm\eta=\bm X\btheta_{\mathrm{loc}},\qquad \ln\bm\sigma=\bm\eta+\ln\kappa_0+\bm W\bm\xi,
 \end{equation}
-where each row of $\bm X$ has one-hot entries for the curve node, bond, tier, client, venue, session and side, and B-spline weights for the size curve (Section~\ref{sec:location}). $\bm X$ has about ten non-zeros per row regardless of the size of the universe, so the gradient and Hessian of the objective are cheap sparse products.
+where each row of $\bm X$ has one-hot entries for the curve node, bond, tier, client, session and side, and B-spline weights for the size curve (Section~\ref{sec:location}). $\bm X$ has about ten non-zeros per row regardless of the size of the universe, so the gradient and Hessian of the objective are cheap sparse products.
 
 \subsubsection{Numerics}
 All terms are computed on the log scale with $w=e^{z}$:
@@ -562,7 +562,7 @@ Under Assumption~\ref{ass:iid} with each $Q_{ij}$ Gumbel-min of median $F^Q_i$ a
 \begin{equation}\label{eq:dealers}
 F_i \;=\; F^Q_i - \sigma_i\ln(n_i-1).
 \end{equation}
-When $n_i$ is observed, the multiplicative structure of Section~\ref{sec:location} is placed on the per-dealer charge $F^Q_i$, which is more stable across venues and protocols, and the street fair charge follows from \eqref{eq:dealers}. When $n_i$ is not observed, its effect is absorbed by the venue and client effects.
+When $n_i$ is observed, the multiplicative structure of Section~\ref{sec:location} is placed on the per-dealer charge $F^Q_i$, which is more stable across venues and protocols, and the street fair charge follows from \eqref{eq:dealers}. When $n_i$ is not observed, its effect is absorbed by the tier and client effects.
 
 %======================================================================
 \section{Structural model for location and scale}\label{sec:location}
@@ -573,23 +573,23 @@ Let $\eta_i=\ln F_i$ (or $\ln F^Q_i$ under \eqref{eq:dealers}). We impose the ad
 \begin{equation}\label{eq:eta}
 \eta_i \;=\; \underbrace{\eta^{\mathrm{bond}}_{b(i)}}_{\text{bond at }q^\star}
 + \underbrace{h\bigl(\ln(q_i/q^\star_{b})\bigr)}_{\text{size curve}}
-+ \alpha_{k(i)} + u_{c(i)} + \nu_{v(i)} + \delta\,d_i + \omega_{p(i)},
++ \alpha_{k(i)} + u_{c(i)} + \delta\,d_i + \omega_{p(i)},
 \end{equation}
 with the bond term made of a country curve evaluated at the bond's maturity and an idiosyncratic spread,
 \begin{equation}\label{eq:bond}
 \eta^{\mathrm{bond}}_b \;=\; \beta_0 + f_{g(b)}(T_b) + e_b .
 \end{equation}
-Here $f_g$ is the maturity curve of country $g$ (\S\ref{sec:curve}), $e_b$ the idiosyncratic bond spread, $h$ the size curve, $\alpha_k$ the tier effect, $u_c$ the client deviation from its tier, $\nu_v$ the venue effect, $\delta$ half the bid/offer asymmetry and $\omega_p$ the trading-session effect (\S\ref{sec:session}).
+Here $f_g$ is the maturity curve of country $g$ (\S\ref{sec:curve}), $e_b$ the idiosyncratic bond spread, $h$ the size curve, $\alpha_k$ the tier effect, common to all bonds (\S\ref{sec:tiervenue}), $u_c$ the client deviation from its tier, $\delta$ half the bid/offer asymmetry and $\omega_p$ the trading-session effect (\S\ref{sec:session}).
 
 Exponentiating gives the multiplicative reading:
 \begin{equation}\label{eq:multiplicative}
 \boxed{\;
-F_i \;=\; F^{0}_{b}\cdot S(q_i)\cdot M^{\mathrm{tier}}_{k}\cdot M^{\mathrm{cl}}_{c}\cdot M^{\mathrm{ven}}_{v}\cdot M^{\mathrm{side}}_{d}\cdot M^{\mathrm{ses}}_{p},
+F_i \;=\; F^{0}_{b}\cdot S(q_i)\cdot M^{\mathrm{tier}}_{k}\cdot M^{\mathrm{cl}}_{c}\cdot M^{\mathrm{side}}_{d}\cdot M^{\mathrm{ses}}_{p},
 \qquad
 F^0_b=\underbrace{e^{\beta_0+f_{g(b)}(T_b)}}_{\text{country curve}}\cdot\underbrace{e^{e_b}}_{\text{idiosyncratic}}
 \;}
 \end{equation}
-with $S(q)=e^{h(\ln(q/q^\star_b))}$, $M^{\mathrm{tier}}_k=e^{\alpha_k}$, $M^{\mathrm{cl}}_c=e^{u_c}$, $M^{\mathrm{ven}}_v=e^{\nu_v}$, $M^{\mathrm{side}}_d=e^{\delta d}$, $M^{\mathrm{ses}}_p=e^{\omega_p}$.
+with $S(q)=e^{h(\ln(q/q^\star_b))}$, $M^{\mathrm{tier}}_k=e^{\alpha_k}$, $M^{\mathrm{cl}}_c=e^{u_c}$, $M^{\mathrm{side}}_d=e^{\delta d}$, $M^{\mathrm{ses}}_p=e^{\omega_p}$.
 
 \begin{decision}
 \textbf{No liquidity score, no age.} Bond characteristics such as liquidity, age, benchmark or on-the-run status, issue size and repo specialness are not modelled as covariates. Their persistent effect on the charge is absorbed by $e_b$, estimated from the bond's own inquiry history. Consequences:
@@ -599,6 +599,27 @@ with $S(q)=e^{h(\ln(q/q^\star_b))}$, $M^{\mathrm{tier}}_k=e^{\alpha_k}$, $M^{\ma
 \item slow changes (ageing, loss of benchmark status) are tracked with a lag of the order of the time-decay half-life $H$ of the daily fit, and faster within the day by the intraday filter, where $e_b$ is a state.
 \end{enumerate}
 \end{decision}
+
+\subsection{Tier and venue}\label{sec:tiervenue}
+
+\paragraph{Tier: one set of multipliers for all bonds.} The tier effects $\alpha_k$ are common to every bond: $M^{\mathrm{tier}}_k$ says how much more (or less) the street charges clients of tier $k$ than clients of the reference tier, whatever the bond. This keeps the number of tier parameters at $K-1$ and lets every inquiry inform them.
+
+\paragraph{Optional extension: tier by country.} If diagnostics show that tier effects differ across sovereign complexes, the tier effect becomes
+\begin{equation}\label{eq:tiercountry}
+\alpha_{k,g}=\alpha_k+\tilde\alpha_{k,g},\qquad \tilde\alpha_{k,g}\sim\mathcal N(0,\tau_{\tilde\alpha}^2),\qquad \tilde\alpha_{k_0,g}=0,
+\end{equation}
+so each country's tier multipliers are pulled toward the global ones and only move away where that country's data support it. The constraint $\tilde\alpha_{k_0,g}=0$ for the reference tier avoids confusion with the country level $a_g$. The extension adds $(K-1)G$ shrunk parameters; $\tau_{\tilde\alpha}$ is tuned with the other hyperparameters, and $\tau_{\tilde\alpha}\to0$ recovers the global specification, so the two can be compared directly by out-of-sample log score.
+
+\begin{decision}
+\textbf{Granularity stops at country.} Tier effects are global, optionally by country. They are not made specific to bonds, maturities or sessions: these cells are too thin, and differences at that level are already carried by the idiosyncratic spread $e_b$, the country curve and the client effects $u_c$.
+\end{decision}
+
+\paragraph{Venue: dropped in v1.} The venue is not a term of the location in v1. The rationale is that venue choice is largely a client characteristic: a given client tends to route through the same platform, so a venue effect is mostly absorbed by the tier and client effects. Two caveats define when this fails:
+\begin{itemize}[itemsep=1pt]
+\item \textbf{Clients split across venues.} If a client uses several venues with different competition, the venue difference is not absorbed by $u_c$. The main channel is the number of dealers in competition; where it is disclosed, $\ln n_i$ is kept in the scale (\S\ref{sec:scale}) and, optionally, in the dealer-count adjustment \eqref{eq:dealers}, which captures most of what a venue effect would.
+\item \textbf{Protocol differences.} Venues differ in what they disclose (cover, rank). This affects the record type and its interval (Table~\ref{tab:intervals}), not the location; the venue field is still used to build the data, so nothing is lost there.
+\end{itemize}
+\textbf{Reinstatement test.} Venue is kept in the validation suite (\S\ref{sec:validation}): win-curve calibration and mean PIT by venue. If a venue shows a persistent, material bias, it is reinstated as a global effect $\nu_v$ (reference venue $\nu_{v_0}=0$), with the same optional per-country extension as the tier.
 
 \subsection{Country maturity curve}\label{sec:curve}
 
@@ -680,13 +701,13 @@ $\tilde{\bff}_g$ & curvature penalty $\lambda_g\bm K_g$, orthogonal to lines & c
 $e_b$ & $\mathcal N(0,\tau_e^2)$ & idiosyncratic bond spread \\
 $\alpha_k$ & $\alpha_{k_0}=0$ (reference tier) & tier multiplier \\
 $u_c$ & $\mathcal N(0,\tau^2_{u,k(c)})$ & client, pooled toward its tier \\
-$\nu_v$ & $\nu_{v_0}=0$ (reference venue) & venue multiplier \\
+$\tilde\alpha_{k,g}$ (optional) & $\mathcal N(0,\tau_{\tilde\alpha}^2)$, $\tilde\alpha_{k_0,g}=0$ & tier by country, pooled to global \\
 $\omega_p$ & $\omega_{\mathrm{core}}=0$ (reference session) & session multiplier \\
 spline $h$ & 2nd-difference penalty; $h(0)=0$ & size curve \\
 \bottomrule
 \end{tabular}
 \end{center}
-With these constraints, $F^0_b$ is the median cover for bond $b$ at size $q^\star_b$, for an average client of the reference tier, on the reference venue, averaged over sides, in the core session.
+With these constraints, $F^0_b$ is the median cover for bond $b$ at size $q^\star_b$, for an average client of the reference tier, averaged over sides, in the core session.
 
 %======================================================================
 \section{Reservation and trade propensity}\label{sec:reservation}
@@ -743,9 +764,9 @@ With exponential time-decay weights $w_i=2^{-(T-t_i)/H}$ (half-life $H$, in busi
 \mathcal{J}(\btheta)\;=\;\sum_{i}w_i\,\ell_i(\btheta)
 \;-\;\sum_g\Bigl[\frac{\lambda_g}{2}\,\tilde{\bff}_g\T\bm K_g\tilde{\bff}_g+\frac{a_g^2}{2\tau_a^2}+\frac{(b_g-\bar b)^2}{2\tau_b^2}\Bigr]
 \;-\;\sum_b\frac{e_b^2}{2\tau_e^2}\\
-\;-\;\sum_c\frac{u_c^2}{2\tau_{u,k(c)}^2}\;-\;\mathrm{pen}(h)\;-\;\tfrac12\|\bm\vartheta\|^2_{\mathrm{weak}},
+\;-\;\sum_c\frac{u_c^2}{2\tau_{u,k(c)}^2}\;-\;\sum_{k,g}\frac{\tilde\alpha_{k,g}^2}{2\tau_{\tilde\alpha}^2}\;-\;\mathrm{pen}(h)\;-\;\tfrac12\|\bm\vartheta\|^2_{\mathrm{weak}},
 \end{multline}
-where $\btheta$ collects all parameters and $\bm\vartheta$ the fixed effects.
+where $\btheta$ collects all parameters and $\bm\vartheta$ the fixed effects; the $\tilde\alpha_{k,g}$ term is present only if tier-by-country effects are enabled.
 
 \subsection{Gradients}
 Every term depends on $\btheta$ only through $(\eta_i,\ln\sigma_i)$, and through these only via the standardised levels $z_i(y)$ of \eqref{eq:z}. Appendix~\ref{app:derivatives} lists $\partial\ell/\partial z$ and $\partial^2\ell/\partial z^2$ for each type. The chain rule uses
@@ -794,9 +815,9 @@ Fair charge per bond & $F^0_b=e^{\beta_0+f_{g(b)}(T_b)+e_b}$ at $q^\star_b$ & $\
 \quad of which idiosyncratic & $e^{e_b}$ & credible interval \\
 Country multipliers & $M^{\mathrm{cty}}_g=e^{a_g}$ (at $\tau_{\mathrm{ref}}$) & credible interval \\
 Size curve & $S(q)=e^{h(\ln(q/q^\star_b))}$ & pointwise band \\
-Tier multipliers & $M^{\mathrm{tier}}_k=e^{\alpha_k}$ & credible interval \\
+Tier multipliers & $M^{\mathrm{tier}}_k=e^{\alpha_k}$ (by country if enabled) & credible interval \\
 Client multipliers & $M^{\mathrm{cl}}_c=e^{u_c}$; flagged if idiosyncratic & credible interval \\
-Venue, side & $e^{\nu_v}$, $e^{\pm\delta}$ & credible interval \\
+Side & $e^{\pm\delta}$ & credible interval \\
 Session multipliers & $M^{\mathrm{ses}}_{\mathrm{pre}}$, $M^{\mathrm{ses}}_{\mathrm{post}}$ & credible interval \\
 Relative width & $\kappa_i=\sigma_i/F_i$ by market state & --- \\
 Trade propensity & $\pi$ by tier/client & --- \\
@@ -821,7 +842,7 @@ where $\mu_t$ is a market-wide factor, $a_{g,t}$ a parallel shift of country $g$
 \begin{equation}\label{eq:obs}
 \eta_i(\bx)=\eta^0_i+\bh_i\T\bx,
 \end{equation}
-where $\bh_i$ has ones at the entries $\mu$, $a_{g(b(i))}$, $\alpha_{k(i)}$, $e_{b(i)}$, $u_{c(i)}$ and zeros elsewhere. The curve shape $\tilde{\bff}_g$, the size curve, the session and venue effects and the scales $\sigma_i$ are frozen at their morning values: they are second-order, noisier quantities, and freezing them keeps the update one-dimensional and stable.
+where $\bh_i$ has ones at the entries $\mu$, $a_{g(b(i))}$, $\alpha_{k(i)}$, $e_{b(i)}$, $u_{c(i)}$ and zeros elsewhere. The curve shape $\tilde{\bff}_g$, the size curve, the session effect, the per-country tier deviations $\tilde\alpha_{k,g}$ (if enabled) and the scales $\sigma_i$ are frozen at their morning values: they are second-order, noisier quantities, and freezing them keeps the update one-dimensional and stable.
 
 \textbf{Dynamics.} Time is measured in hours from the first inquiry of the day; all three sessions use the same clock, the session effect being in $\eta^0_i$,
 \begin{equation}\label{eq:dyn}
@@ -948,7 +969,7 @@ Take $F=4.0$\,bp, $\sigma=1.5$\,bp, $a=0.5$\,bp. Then $A=2.700$, $\Wo(e^A)=2.005
 
 \begin{enumerate}[itemsep=2pt]
 \item \textbf{Proper scoring.} Out-of-sample log score of the full likelihood, against two benchmarks: a pooled model without client effects, and a logistic win/loss classifier on the same features.
-\item \textbf{Calibration of the win curve.} Reliability diagram of predicted $\pi_iS_C(s_i)$ against realised wins, by decile and by tier, venue, country and session.
+\item \textbf{Calibration of the win curve.} Reliability diagram of predicted $\pi_iS_C(s_i)$ against realised wins, by decile and by tier, country and session, and by venue as the reinstatement test of \S\ref{sec:tiervenue}.
 \item \textbf{Shape of the cover.} Within cells, estimate $\hat S$ nonparametrically (Turnbull estimator on the interval table) and plot $\ln(-\ln\hat S(y))$ against $y$, or against $k=(y-F_i)/\sigma_i$ after standardisation. Under the model the plot is a straight line of slope $1/\sigma$ (Proposition~\ref{prop:ph}); curvature indicates a wrong family, a kink at small $n_i$ indicates the small-dealer-count issue of \S\ref{sec:limitations}. For exact and interval records, the randomised PIT $u_i=S_C(c_i)$ should be uniform.
 \item \textbf{Family comparison.} Log score of Gumbel-min against the logistic (Proposition~\ref{prop:logistic}) on the same structure.
 \item \textbf{Intraday filter.} One-step-ahead predictive log score of the filtered model versus the static morning model on replayed days; the filter must win on volatile days and not lose on quiet ones.
